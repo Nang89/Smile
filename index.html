@@ -1653,6 +1653,12 @@ function applyRoleAccess(role){
   }
 }
 // Safe localStorage wrapper
+// Always returns date as YYYY-MM-DD in device local timezone
+function localDateStr(d){
+  var dt=d||new Date();
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+
 const LS = {
   get: function(k){try{return LS.get(k);}catch(e){return null;}},
   set: function(k,v){try{LS.set(k,v);}catch(e){}},
@@ -1965,6 +1971,9 @@ function render(){
   const m=String(viewDate.getMonth()+1).padStart(2,'0');
   const d=String(viewDate.getDate()).padStart(2,'0');
   const viewStr=y+'-'+m+'-'+d;
+  // Always set form date to today
+  var fdate=document.getElementById('f-date');
+  if(fdate&&!fdate.value) fdate.value=localDateStr();
   const filtered=records.filter(r=>r.date===viewStr);
   const tbody=document.getElementById('rec-tbody');
   tbody.innerHTML='';
@@ -4992,12 +5001,6 @@ function autoSync(){
   clearTimeout(syncTimer);
   showSyncStatus('Saving...','#e67e22');
   syncTimer=setTimeout(function(){pushToSheet(true);},2000);
-}
-
-// Always returns today as YYYY-MM-DD in device local timezone
-function localDateStr(d){
-  var dt=d||new Date();
-  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
 
 function normalizeDate(s){
