@@ -4549,6 +4549,9 @@ function renderCaseTable(caseType){
   tbody.innerHTML='';
   const tdStyle='padding:11px 10px;border-bottom:1px solid #daeee6;color:#1c2c2e;background-color:transparent;font-size:0.85rem';
 
+  // Always read fresh from global variable
+  if(!caseRecords[caseType]) return;
+
   // Apply year and done filter
   const filtered = caseRecords[caseType].filter((r,i)=>{
     const recYear = r.date ? parseInt(r.date.split('-')[0]) : null;
@@ -5057,7 +5060,10 @@ function pullFromSheet(){
     if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
     if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
     if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-    if(d.caseRecords){caseRecords=d.caseRecords;LS.set('caseRecords',JSON.stringify(caseRecords));}
+    if(d.caseRecords&&(d.caseRecords.fixed||d.caseRecords.removable||d.caseRecords.implant||d.caseRecords.ortho)){
+      caseRecords=d.caseRecords;
+      LS.set('caseRecords',JSON.stringify(caseRecords));
+    }
     if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
     if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
     if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
