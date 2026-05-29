@@ -1878,7 +1878,7 @@ let records = JSON.parse(LS.get('dental-records') || '[]');
 let editIdx = -1;
 
 function updateBadges(){
-  const today=new Date().toISOString().split('T')[0];
+  var _td=new Date();const today=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
   const thisMonth=today.slice(0,7);
   document.getElementById('badge-today').textContent=records.filter(r=>r.date===today).length;
   document.getElementById('badge-month').textContent=records.filter(r=>r.date.startsWith(thisMonth)).length;
@@ -1961,7 +1961,10 @@ function delRec(i){
 
 
 function render(){
-  const viewStr=viewDate.toISOString().split('T')[0];
+  const y=viewDate.getFullYear();
+  const m=String(viewDate.getMonth()+1).padStart(2,'0');
+  const d=String(viewDate.getDate()).padStart(2,'0');
+  const viewStr=y+'-'+m+'-'+d;
   const filtered=records.filter(r=>r.date===viewStr);
   const tbody=document.getElementById('rec-tbody');
   tbody.innerHTML='';
@@ -3654,7 +3657,7 @@ function switchInvTab(tab, el){
 
 // Dashboard
 function renderDashboard(){
-  const today=new Date().toISOString().split('T')[0];
+  var _td=new Date();const today=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
 
   // Date label
   const dateEl=document.getElementById('dash-date');
@@ -3919,7 +3922,7 @@ function renderPhPurchase(){
         markBtn.onclick=function(){
           var idx=parseInt(this.getAttribute('data-idx'));
           pharmacyPurchase[idx].status='paid';
-          pharmacyPurchase[idx].paidDate=new Date().toISOString().split('T')[0];
+          var _pd=new Date();pharmacyPurchase[idx].paidDate=_pd.getFullYear()+'-'+String(_pd.getMonth()+1).padStart(2,'0')+'-'+String(_pd.getDate()).padStart(2,'0');
           LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
           renderPhPurchase();
         };
@@ -4971,41 +4974,68 @@ function showSyncStatus(msg,color){
 function autoSync(){
   if(!SCRIPT_URL) return;
   clearTimeout(syncTimer);
-  showSyncStatus('⏳ Saving...','#e67e22');
+  showSyncStatus('Saving...','#e67e22');
   syncTimer=setTimeout(function(){pushToSheet(true);},2000);
 }
 
+function normalizeDate(s){
+  if(!s) return '';
+  s=String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  var d=new Date(s);
+  if(!isNaN(d.getTime())){
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  return s;
+}
+function fixRecordDates(arr){
+  if(!arr||!arr.length) return arr;
+  return arr.map(function(r){
+    var obj={};
+    Object.keys(r).forEach(function(k){
+      var kl=k.toLowerCase();
+      if(kl==='date'||kl.endsWith('date')) obj[k]=normalizeDate(r[k]);
+      else obj[k]=r[k];
+    });
+    return obj;
+  });
+}
+
 function pushToSheet(silent){
-  if(!SCRIPT_URL){if(!silent)alert('No Script URL set');return;}
-  if(!silent) showSyncStatus('⬆ Syncing...','#e67e22');
+  if(!SCRIPT_URL) return;
+  if(!silent) showSyncStatus('Syncing...','#e67e22');
   var payload={action:'push',records:records,pharmacyIncome:pharmacyIncome,pharmacyPurchase:pharmacyPurchase,pharmacyExpend:pharmacyExpend,invStockIn:invStockIn,lowStockAlerts:lowStockAlerts,caseRecords:caseRecords,invLedgerData:invLedgerData,invLedgerItems:invLedgerItems,expData:expData,expNames:expNames};
-  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)})
-    .then(function(){showSyncStatus('✅ Synced','#27ae60');})
-    .catch(function(){showSyncStatus('📵 Offline — saved locally','#e67e22');});
+  fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.status==='ok') showSyncStatus('Synced','#27ae60');
+    else showSyncStatus('Sync error','#c0392b');
+  })
+  .catch(function(){showSyncStatus('Offline - saved locally','#e67e22');});
 }
 
 function pullFromSheet(){
-  if(!SCRIPT_URL){return;}
-  showSyncStatus('⬇ Loading...','#e67e22');
-  fetch(SCRIPT_URL+'?action=pull')
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(d.status!=='ok'){showSyncStatus('❌ '+d.msg,'#c0392b');return;}
-      if(d.records&&d.records.length){records=d.records;LS.set('dental-records',JSON.stringify(records));}
-      if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=d.pharmacyIncome;LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
-      if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=d.pharmacyPurchase;LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
-      if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=d.pharmacyExpend;LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
-      if(d.invStockIn&&d.invStockIn.length){invStockIn=d.invStockIn;LS.set('invStockIn',JSON.stringify(invStockIn));}
-      if(d.lowStockAlerts){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-      if(d.caseRecords){caseRecords=d.caseRecords;LS.set('caseRecords',JSON.stringify(caseRecords));}
-      if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
-      if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
-      if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
-      if(d.expNames){expNames=d.expNames;LS.set('expNames',JSON.stringify(expNames));}
-      showSyncStatus('✅ Up to date','#27ae60');
-      goTo(currentPage,null);
-    })
-    .catch(function(){showSyncStatus('📵 Offline','#e67e22');});
+  if(!SCRIPT_URL) return;
+  showSyncStatus('Loading...','#e67e22');
+  fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'pull'})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.status!=='ok'){showSyncStatus('Error','#c0392b');return;}
+    if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
+    if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=fixRecordDates(d.pharmacyIncome);LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
+    if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=fixRecordDates(d.pharmacyPurchase);LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
+    if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
+    if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
+    if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
+    if(d.caseRecords){caseRecords=d.caseRecords;LS.set('caseRecords',JSON.stringify(caseRecords));}
+    if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
+    if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
+    if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
+    if(d.expNames){expNames=d.expNames;LS.set('expNames',JSON.stringify(expNames));}
+    showSyncStatus('Up to date','#27ae60');
+    goTo(currentPage,null);
+  })
+  .catch(function(){showSyncStatus('Offline','#e67e22');});
 }
 
 function openSyncSettings(){
@@ -5015,13 +5045,13 @@ function openSyncSettings(){
   overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
   overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:400px">'
-    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">☁ Sync Settings</h3>'
+    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">Sync Settings</h3>'
     +'<div class="f-group" style="margin-bottom:8px"><label class="f-label">Apps Script URL</label>'
     +'<input class="f-input" type="text" id="sync-url-input" placeholder="Paste your Web App URL" value="'+(SCRIPT_URL||'')+'"/></div>'
-    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:16px">Auto-syncs after every save when online. Saves locally when offline.</p>'
+    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:16px">Auto-syncs after every save. Saves locally when offline.</p>'
     +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<button onclick="pushToSheet(false)" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">⬆ Push Now</button>'
-    +'<button onclick="pullFromSheet()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">⬇ Pull Now</button>'
+    +'<button onclick="pushToSheet(false)" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Push Now</button>'
+    +'<button onclick="pullFromSheet()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Pull Now</button>'
     +'</div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end">'
     +'<button onclick="document.getElementById(\'sync-modal\').remove()" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Cancel</button>'
@@ -5034,25 +5064,9 @@ function saveSyncUrl(){
   var url=document.getElementById('sync-url-input').value.trim();
   SCRIPT_URL=url;LS.set('scriptUrl',url);
   document.getElementById('sync-modal').remove();
-  showSyncStatus('✅ URL saved','#27ae60');
+  showSyncStatus('URL saved','#27ae60');
 }
 
-function goTo(page,el){
-  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n=>n.classList.remove('active'));
-  document.querySelectorAll('.page-content').forEach(p=>p.style.display='none');
-  // activate all matching nav items
-  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n=>{
-    if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+page+"'"))
-      n.classList.add('active');
-  });
-  const t=document.getElementById('page-'+page);
-  if(t){t.style.display='flex';}
-  currentPage=page;
-  document.getElementById('page-title').textContent=pageTitles[page]||page;
-  if(page==='dashboard') renderDashboard();
-  if(page==='patientreport'){ renderLedger(); renderMonthlyReport(); renderYearlyReport(); }
-  if(page==='incomereport'){ renderExpenses(); updateExpLabels(); renderIncomeMonthly(); renderNetIncome(); updateNetYearLabel(); }
-}
 </script>
 </body>
 </html>
