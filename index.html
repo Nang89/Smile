@@ -4980,6 +4980,8 @@ function goTo(page,el){
   var titleEl=document.getElementById('page-title');
   if(titleEl) titleEl.textContent=pageTitles[page]||page;
   if(page==='dashboard') renderDashboard();
+  if(page==='patients'){render();}
+  if(page==='cases'){['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});}
   if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
   if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
 }
