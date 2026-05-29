@@ -4991,7 +4991,7 @@ function goTo(page,el){
   if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
   if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
 }
-var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwGEf_xqe3R24V1aHrRx2QSJls2iriwcqyFK_4ABhQSoZgTPG2Wnfw8ZFkt0ygy72txpA/exec';
+var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwCXyFC4-4tnqTtSX9V0mKVggq9tI8vx17uVu46cmTvjkEQ6NMbI3x9WBLoeem3MkgtVw/exec';
 var syncPending=false;
 var syncTimer=null;
 var currentPage='patients';
@@ -5037,7 +5037,10 @@ function fixRecordDates(arr){
 function pushToSheet(silent){
   if(!SCRIPT_URL) return;
   if(!silent) showSyncStatus('Syncing...','#e67e22');
-  var payload={action:'push',records:records,pharmacyIncome:pharmacyIncome,pharmacyPurchase:pharmacyPurchase,pharmacyExpend:pharmacyExpend,invStockIn:invStockIn,lowStockAlerts:lowStockAlerts,caseRecords:caseRecords,invLedgerData:invLedgerData,invLedgerItems:invLedgerItems,expData:expData,expNames:expNames};
+  // Don't push if caseRecords is empty — prevents overwriting real data
+  var caseTotal=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
+  var caseData=caseTotal>0?caseRecords:null;
+  var payload={action:'push',records:records,pharmacyIncome:pharmacyIncome,pharmacyPurchase:pharmacyPurchase,pharmacyExpend:pharmacyExpend,invStockIn:invStockIn,lowStockAlerts:lowStockAlerts,caseRecords:caseData,invLedgerData:invLedgerData,invLedgerItems:invLedgerItems,expData:expData,expNames:expNames};
   fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
   .then(function(r){return r.json();})
   .then(function(d){
