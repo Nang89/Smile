@@ -390,7 +390,9 @@ input, select, textarea{
         Income Report
       </div>
     </nav>
-    <div style="margin-top:auto;padding-top:16px">
+    <div style="margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px">
+      <div id="sync-status" style="display:none;font-size:0.72rem;text-align:center;padding:4px 8px;border-radius:6px;background:#E5F5E0"></div>
+      <button onclick="openSyncSettings()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">☁ Sync with Sheet</button>
       <button onclick="logout()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">⏻ Logout</button>
     </div>
   </aside>
@@ -724,7 +726,7 @@ input, select, textarea{
         <!-- New Entry -->
         <div style="display:flex;justify-content:center;padding:20px 16px 12px">
           <button onclick="openInvNewEntry()" style="background-color:#1f4e4a;color:#fff;border:none;border-radius:10px;padding:12px 40px;font-size:0.9rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(31,78,74,0.2)">+ New Entry</button>
-          <button onclick="debugStock()" style="background-color:#e67e22;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:0.9rem;font-weight:700;cursor:pointer;font-family:inherit;margin-left:8px">Debug</button>
+
         </div>
 
         <!-- 4 Tab Boxes -->
@@ -1589,13 +1591,14 @@ function updatePinDots(){
 function doLogin(role){
   currentRole=role;
   document.getElementById('login-screen').style.display='none';
-  // Set role label
   var rl=document.getElementById('sidebar-role-label');
   if(rl) rl.textContent=ROLE_LABELS[role];
   applyRoleAccess(role);
-  // Navigate to default page
-  var defaultPage={admin:'patients',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
+  var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
+  // Auto-pull on login then every 30s
+  setTimeout(function(){pullFromSheet();},1500);
+  setInterval(function(){pullFromSheet();},30000);
 }
 function logout(){
   currentRole=null;selectedRole=null;pinEntry='';
@@ -2004,6 +2007,7 @@ function render(){
     bar.style.display='none';
   }
   LS.set('dental-records', JSON.stringify(records));
+  autoSync();
 }
 
 // Patient Report navigation
@@ -2565,6 +2569,7 @@ function saveExpCell(type,name,year,month){
   if(!expData[type][yStr][month]) expData[type][yStr][month]={};
   expData[type][yStr][month][name]=val===''?'':Number(val);
   saveExpData();
+  autoSync();
   document.getElementById('exp-cell-modal').remove();
   renderExpenses();
 }
@@ -3056,7 +3061,10 @@ function openInvNewEntry(){
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
-  document.getElementById('isn-date').valueAsDate=new Date();
+  var today=new Date();
+  var dd=String(today.getDate()).padStart(2,'0');
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  document.getElementById('isn-date').value=today.getFullYear()+'-'+mm+'-'+dd;
   // Save button via createElement to avoid iOS inline onclick issues
   var saveBtn=document.createElement('button');
   saveBtn.className='f-btn';
@@ -3084,10 +3092,41 @@ function addStockItemRow(){
   const catSel=document.createElement('select');catSel.className='f-input';
   catSel.innerHTML='<option value="">-- Select --</option><option value="dental">Dental</option><option value="implant">Implant</option><option value="general">General</option><option value="lab">Lab</option>';
 
-  // Item name text input
+  // Item select
   const itemLabel=document.createElement('label');itemLabel.className='f-label';itemLabel.textContent='Item Name *';
-  const itemInput=document.createElement('input');
-  itemInput.className='f-input';itemInput.type='text';itemInput.placeholder='Type item name';
+  const itemSel=document.createElement('select');itemSel.className='f-input';
+  itemSel.innerHTML='<option value="">-- Select category first --</option>';
+
+  // New item input (hidden by default)
+  const newItemInput=document.createElement('input');
+  newItemInput.className='f-input';newItemInput.type='text';
+  newItemInput.placeholder='Type new item name';
+  newItemInput.style.display='none';
+  newItemInput.style.marginTop='6px';
+
+  catSel.onchange=function(){
+    var cat=this.value;
+    newItemInput.style.display='none';
+    newItemInput.value='';
+    if(!cat){itemSel.innerHTML='<option value="">-- Select category first --</option>';return;}
+    var items=(invLedgerItems[cat]||[]).slice().sort();
+    itemSel.innerHTML='<option value="">-- Select item --</option>';
+    items.forEach(function(name){
+      var opt=document.createElement('option');opt.value=name;opt.textContent=name;itemSel.appendChild(opt);
+    });
+    var addOpt=document.createElement('option');addOpt.value='__new__';addOpt.textContent='+ Add New Item';
+    itemSel.appendChild(addOpt);
+  };
+
+  itemSel.onchange=function(){
+    if(this.value==='__new__'){
+      newItemInput.style.display='block';
+      newItemInput.focus();
+    } else {
+      newItemInput.style.display='none';
+      newItemInput.value='';
+    }
+  };
 
   // Qty
   const qtyLabel=document.createElement('label');qtyLabel.className='f-label';qtyLabel.textContent='Qty *';
@@ -3109,7 +3148,7 @@ function addStockItemRow(){
 
   row.appendChild(delBtn);
   row.appendChild(catLabel);row.appendChild(catSel);
-  row.appendChild(itemLabel);row.appendChild(itemInput);
+  row.appendChild(itemLabel);row.appendChild(itemSel);row.appendChild(newItemInput);
   row.appendChild(qtyPriceRow);
   list.appendChild(row);
 }
@@ -3122,12 +3161,20 @@ function saveInvStock(){
   if(rows.length===0){alert('Please add at least one item');return;}
   let saved=0;
   Array.from(rows).forEach(function(row){
-    const catSel=row.querySelector('select');
-    const allInputs=row.querySelectorAll('input');
-    const category=catSel?catSel.value:'';
-    const itemName=allInputs[0]?allInputs[0].value.trim():'';
-    const qty=allInputs[1]?allInputs[1].value:'';
-    const price=allInputs[2]?allInputs[2].value:'';
+    const selects=row.querySelectorAll('select');
+    const numInputs=row.querySelectorAll('input[type="number"]');
+    const textInputs=row.querySelectorAll('input[type="text"]');
+    const category=selects[0]?selects[0].value:'';
+    var itemName='';
+    if(selects[1]){
+      if(selects[1].value==='__new__'){
+        itemName=textInputs[0]?textInputs[0].value.trim():'';
+      } else {
+        itemName=selects[1].value;
+      }
+    }
+    const qty=numInputs[0]?numInputs[0].value:'';
+    const price=numInputs[1]?numInputs[1].value:'';
     if(category&&itemName&&qty&&price){
       invStockIn.push({date,supplier,items:itemName,qty,price,category});
       if(!invLedgerItems[category]) invLedgerItems[category]=[];
@@ -3137,6 +3184,7 @@ function saveInvStock(){
   });
   if(saved===0){alert('Please complete at least one item row with all fields');return;}
   LS.set('invStockIn',JSON.stringify(invStockIn));
+  autoSync();
   saveInvLedger();
   document.getElementById('inv-entry-modal').remove();
   renderInvStockIn();
@@ -3496,6 +3544,7 @@ function saveLowStockAlert(){
   const parts=sel.split('|');
   lowStockAlerts.push({item:parts[0],category:parts[1],alertQty:Number(qty)});
   LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));
+  autoSync();
   document.getElementById('ls-add-modal').remove();
   renderLowStockAlerts();renderLowStockTable();
 }
@@ -3772,6 +3821,7 @@ function savePhIncEdit(idx){
   pharmacyIncome[idx].retail=document.getElementById('ph-ei-retail').value;
   pharmacyIncome[idx].wholesale=document.getElementById('ph-ei-wholesale').value;
   LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));
+  autoSync();
   document.getElementById('ph-inc-edit-modal').remove();
   renderPhIncome();
 }
@@ -3993,6 +4043,7 @@ function savePhPurchase(){
   if(!date||!supplier||!amount){alert('Please fill Date, Supplier and Amount');return;}
   pharmacyPurchase.push({date,supplier,amount,unit,status,remark});
   LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
+  autoSync();
   document.getElementById('ph-pur-modal').remove();
   renderPhPurchase();
 }
@@ -4110,6 +4161,7 @@ function savePhExpEdit(idx){
   pharmacyExpend[idx].amount=document.getElementById('ph-ee-amount').value;
   pharmacyExpend[idx].unit=document.getElementById('ph-ee-unit').value;
   LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));
+  autoSync();
   document.getElementById('ph-exp-edit-modal').remove();
   renderPhExpend();
 }
@@ -4145,6 +4197,7 @@ function savePhExpend(){
   if(!date||!items||!amount){alert('Please fill Date, Items and Amount');return;}
   pharmacyExpend.push({date,items,amount,unit});
   LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));
+  autoSync();
   document.getElementById('ph-exp-modal').remove();
   renderPhExpend();
 }
@@ -4238,6 +4291,7 @@ function savePhIncome(){
   if(!date||((!retail||retail==0)&&(!wholesale||wholesale==0))){alert('Please enter date and at least one amount');return;}
   pharmacyIncome.push({date,retail:retail||0,wholesale:wholesale||0});
   LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));
+  autoSync();
   document.getElementById('ph-inc-modal').remove();
   renderPhIncome();
 }
@@ -4458,6 +4512,7 @@ function saveCaseEntry(){
     };
     records.push(dailyRec);
     LS.set('dental-records', JSON.stringify(records));
+  autoSync();
     render();
     updateBadges();
   }
@@ -4473,6 +4528,7 @@ function saveCaseEntry(){
 
 function saveCaseRecords(){
   LS.set('caseRecords', JSON.stringify(caseRecords));
+  autoSync();
 }
 
 function renderCaseTable(caseType){
@@ -4808,6 +4864,7 @@ function addPaymentEntry(caseType,recIdx){
     ptname: r.name
   });
   LS.set('dental-records', JSON.stringify(records));
+  autoSync();
   render();
   updateBadges();
 
@@ -4897,6 +4954,89 @@ function switchCaseTab(name, el){
 
 // Nav
 const pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
+// ══ GOOGLE SHEETS AUTO-SYNC ══
+var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwXaco_iwYqWm2naoMn1Pjo2Y_OVQsxbOVDJp7JNH3cIed0ZPOD6u_Ghx8_bSeHduQJ7w/exec';
+var syncPending=false;
+var syncTimer=null;
+var currentPage='patients';
+
+function showSyncStatus(msg,color){
+  var el=document.getElementById('sync-status');
+  if(!el)return;
+  el.textContent=msg;el.style.color=color||'#fff';el.style.display='block';
+  if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
+}
+
+// Called after any data change — debounced 2s to batch rapid saves
+function autoSync(){
+  if(!SCRIPT_URL) return;
+  clearTimeout(syncTimer);
+  showSyncStatus('⏳ Saving...','#e67e22');
+  syncTimer=setTimeout(function(){pushToSheet(true);},2000);
+}
+
+function pushToSheet(silent){
+  if(!SCRIPT_URL){if(!silent)alert('No Script URL set');return;}
+  if(!silent) showSyncStatus('⬆ Syncing...','#e67e22');
+  var payload={action:'push',records:records,pharmacyIncome:pharmacyIncome,pharmacyPurchase:pharmacyPurchase,pharmacyExpend:pharmacyExpend,invStockIn:invStockIn,lowStockAlerts:lowStockAlerts,caseRecords:caseRecords,invLedgerData:invLedgerData,invLedgerItems:invLedgerItems,expData:expData,expNames:expNames};
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)})
+    .then(function(){showSyncStatus('✅ Synced','#27ae60');})
+    .catch(function(){showSyncStatus('📵 Offline — saved locally','#e67e22');});
+}
+
+function pullFromSheet(){
+  if(!SCRIPT_URL){return;}
+  showSyncStatus('⬇ Loading...','#e67e22');
+  fetch(SCRIPT_URL+'?action=pull')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.status!=='ok'){showSyncStatus('❌ '+d.msg,'#c0392b');return;}
+      if(d.records&&d.records.length){records=d.records;LS.set('dental-records',JSON.stringify(records));}
+      if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=d.pharmacyIncome;LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
+      if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=d.pharmacyPurchase;LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
+      if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=d.pharmacyExpend;LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
+      if(d.invStockIn&&d.invStockIn.length){invStockIn=d.invStockIn;LS.set('invStockIn',JSON.stringify(invStockIn));}
+      if(d.lowStockAlerts){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
+      if(d.caseRecords){caseRecords=d.caseRecords;LS.set('caseRecords',JSON.stringify(caseRecords));}
+      if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
+      if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
+      if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
+      if(d.expNames){expNames=d.expNames;LS.set('expNames',JSON.stringify(expNames));}
+      showSyncStatus('✅ Up to date','#27ae60');
+      goTo(currentPage,null);
+    })
+    .catch(function(){showSyncStatus('📵 Offline','#e67e22');});
+}
+
+function openSyncSettings(){
+  var old=document.getElementById('sync-modal');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='sync-modal';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:400px">'
+    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">☁ Sync Settings</h3>'
+    +'<div class="f-group" style="margin-bottom:8px"><label class="f-label">Apps Script URL</label>'
+    +'<input class="f-input" type="text" id="sync-url-input" placeholder="Paste your Web App URL" value="'+(SCRIPT_URL||'')+'"/></div>'
+    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:16px">Auto-syncs after every save when online. Saves locally when offline.</p>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<button onclick="pushToSheet(false)" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">⬆ Push Now</button>'
+    +'<button onclick="pullFromSheet()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">⬇ Pull Now</button>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(\'sync-modal\').remove()" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Cancel</button>'
+    +'<button onclick="saveSyncUrl()" style="padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:700">Save URL</button>'
+    +'</div></div>';
+  document.body.appendChild(overlay);
+}
+
+function saveSyncUrl(){
+  var url=document.getElementById('sync-url-input').value.trim();
+  SCRIPT_URL=url;LS.set('scriptUrl',url);
+  document.getElementById('sync-modal').remove();
+  showSyncStatus('✅ URL saved','#27ae60');
+}
+
 function goTo(page,el){
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('.page-content').forEach(p=>p.style.display='none');
@@ -4907,6 +5047,7 @@ function goTo(page,el){
   });
   const t=document.getElementById('page-'+page);
   if(t){t.style.display='flex';}
+  currentPage=page;
   document.getElementById('page-title').textContent=pageTitles[page]||page;
   if(page==='dashboard') renderDashboard();
   if(page==='patientreport'){ renderLedger(); renderMonthlyReport(); renderYearlyReport(); }
