@@ -4991,7 +4991,7 @@ function goTo(page,el){
   if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
   if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
 }
-var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwCXyFC4-4tnqTtSX9V0mKVggq9tI8vx17uVu46cmTvjkEQ6NMbI3x9WBLoeem3MkgtVw/exec';
+var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwUmlrgVH3paeMgHNwSQ2J7jGnCgDVfwLHTOJOGk5FFxCZ8KfkH57XE7CyQsFx5xpvEHA/exec';
 var syncPending=false;
 var syncTimer=null;
 var currentPage='patients';
@@ -5037,10 +5037,84 @@ function fixRecordDates(arr){
 function pushToSheet(silent){
   if(!SCRIPT_URL) return;
   if(!silent) showSyncStatus('Syncing...','#e67e22');
-  // Don't push if caseRecords is empty — prevents overwriting real data
-  var caseTotal=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
-  var caseData=caseTotal>0?caseRecords:null;
-  var payload={action:'push',records:records,pharmacyIncome:pharmacyIncome,pharmacyPurchase:pharmacyPurchase,pharmacyExpend:pharmacyExpend,invStockIn:invStockIn,lowStockAlerts:lowStockAlerts,caseRecords:caseData,invLedgerData:invLedgerData,invLedgerItems:invLedgerItems,expData:expData,expNames:expNames};
+
+  // Flatten caseRecords: [{category, date, name, treat, ...depositLog as JSON}]
+  var caseRecordsFlat=[];
+  ['fixed','removable','implant','ortho'].forEach(function(cat){
+    (caseRecords[cat]||[]).forEach(function(r){
+      var row={category:cat};
+      Object.keys(r).forEach(function(k){
+        if(k==='depositLog') row[k]=JSON.stringify(r[k]||[]);
+        else row[k]=r[k];
+      });
+      caseRecordsFlat.push(row);
+    });
+  });
+
+  // Flatten expData: [{type, year, month, name, amount}]
+  var expDataFlat=[];
+  ['salary','bills'].forEach(function(type){
+    var typeData=(expData[type]||{});
+    Object.keys(typeData).forEach(function(year){
+      Object.keys(typeData[year]||{}).forEach(function(month){
+        var monthData=typeData[year][month]||{};
+        Object.keys(monthData).forEach(function(name){
+          if(monthData[name]!==''&&monthData[name]!==undefined){
+            expDataFlat.push({type:type,year:year,month:month,name:name,amount:monthData[name]});
+          }
+        });
+      });
+    });
+  });
+
+  // Flatten expNames: [{type, name}]
+  var expNamesFlat=[];
+  Object.keys(expNames||{}).forEach(function(type){
+    (expNames[type]||[]).forEach(function(name){
+      expNamesFlat.push({type:type,name:name});
+    });
+  });
+
+  // Flatten invLedgerItems: [{category, item}]
+  var invLedgerItemsFlat=[];
+  ['dental','implant','general','lab'].forEach(function(cat){
+    (invLedgerItems[cat]||[]).forEach(function(item){
+      invLedgerItemsFlat.push({category:cat,item:item});
+    });
+  });
+
+  // Flatten invLedgerData: [{category, item, year, month, opening, balance}]
+  var invLedgerDataFlat=[];
+  ['dental','implant','general','lab'].forEach(function(cat){
+    Object.keys(invLedgerData[cat]||{}).forEach(function(item){
+      Object.keys(invLedgerData[cat][item]||{}).forEach(function(year){
+        Object.keys(invLedgerData[cat][item][year]||{}).forEach(function(month){
+          var md=invLedgerData[cat][item][year][month]||{};
+          invLedgerDataFlat.push({
+            category:cat,item:item,year:year,month:month,
+            opening:md.opening!==undefined?md.opening:'',
+            balance:md.balance!==undefined?md.balance:''
+          });
+        });
+      });
+    });
+  });
+
+  var payload={
+    action:'push',
+    records:records,
+    pharmacyIncome:pharmacyIncome,
+    pharmacyPurchase:pharmacyPurchase,
+    pharmacyExpend:pharmacyExpend,
+    invStockIn:invStockIn,
+    lowStockAlerts:lowStockAlerts,
+    caseRecordsFlat:caseRecordsFlat,
+    expDataFlat:expDataFlat,
+    expNamesFlat:expNamesFlat,
+    invLedgerItemsFlat:invLedgerItemsFlat,
+    invLedgerDataFlat:invLedgerDataFlat
+  };
+
   fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
   .then(function(r){return r.json();})
   .then(function(d){
@@ -5057,20 +5131,84 @@ function pullFromSheet(){
   .then(function(r){return r.json();})
   .then(function(d){
     if(d.status!=='ok'){showSyncStatus('Error','#c0392b');return;}
+
+    // Flat arrays
     if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
     if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=fixRecordDates(d.pharmacyIncome);LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
     if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=fixRecordDates(d.pharmacyPurchase);LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
     if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
     if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
     if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-    if(d.caseRecords&&(d.caseRecords.fixed||d.caseRecords.removable||d.caseRecords.implant||d.caseRecords.ortho)){
-      caseRecords=d.caseRecords;
+
+    // Unflatten caseRecords
+    if(d.caseRecordsFlat&&d.caseRecordsFlat.length){
+      var cr={fixed:[],removable:[],implant:[],ortho:[]};
+      d.caseRecordsFlat.forEach(function(row){
+        var cat=row.category;
+        if(!cr[cat]) cr[cat]=[];
+        var rec={};
+        Object.keys(row).forEach(function(k){
+          if(k==='category') return;
+          if(k==='depositLog'){
+            try{rec[k]=JSON.parse(row[k]);}catch(e){rec[k]=[];}
+          } else {
+            rec[k]=row[k];
+          }
+        });
+        cr[cat].push(rec);
+      });
+      caseRecords=cr;
       LS.set('caseRecords',JSON.stringify(caseRecords));
     }
-    if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
-    if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
-    if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
-    if(d.expNames){expNames=d.expNames;LS.set('expNames',JSON.stringify(expNames));}
+
+    // Unflatten expNames
+    if(d.expNamesFlat&&d.expNamesFlat.length){
+      var en={salary:[],bills:[]};
+      d.expNamesFlat.forEach(function(row){
+        if(row.type&&row.name&&!en[row.type].includes(row.name)) en[row.type].push(row.name);
+      });
+      expNames=en;
+      LS.set('expNames',JSON.stringify(expNames));
+    }
+
+    // Unflatten expData
+    if(d.expDataFlat&&d.expDataFlat.length){
+      var ed={salary:{},bills:{}};
+      d.expDataFlat.forEach(function(row){
+        var type=row.type,year=row.year,month=row.month,name=row.name,amount=row.amount;
+        if(!ed[type]) ed[type]={};
+        if(!ed[type][year]) ed[type][year]={};
+        if(!ed[type][year][month]) ed[type][year][month]={};
+        ed[type][year][month][name]=amount;
+      });
+      expData=ed;
+      LS.set('expData',JSON.stringify(expData));
+    }
+
+    // Unflatten invLedgerItems
+    if(d.invLedgerItemsFlat&&d.invLedgerItemsFlat.length){
+      var ili={dental:[],implant:[],general:[],lab:[]};
+      d.invLedgerItemsFlat.forEach(function(row){
+        if(row.category&&row.item&&!ili[row.category].includes(row.item)) ili[row.category].push(row.item);
+      });
+      invLedgerItems=ili;
+      LS.set('invLedgerItems',JSON.stringify(invLedgerItems));
+    }
+
+    // Unflatten invLedgerData
+    if(d.invLedgerDataFlat&&d.invLedgerDataFlat.length){
+      var ild={dental:{},implant:{},general:{},lab:{}};
+      d.invLedgerDataFlat.forEach(function(row){
+        var cat=row.category,item=row.item,year=row.year,month=row.month;
+        if(!ild[cat]) ild[cat]={};
+        if(!ild[cat][item]) ild[cat][item]={};
+        if(!ild[cat][item][year]) ild[cat][item][year]={};
+        ild[cat][item][year][month]={opening:row.opening,balance:row.balance};
+      });
+      invLedgerData=ild;
+      LS.set('invLedgerData',JSON.stringify(invLedgerData));
+    }
+
     showSyncStatus('Up to date','#27ae60');
     goTo(currentPage,null);
   })
