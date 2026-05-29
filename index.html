@@ -4957,8 +4957,24 @@ function switchCaseTab(name, el){
 
 // Nav
 const pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
-// ══ GOOGLE SHEETS AUTO-SYNC ══
-var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbyAqfXppF63dS-3rlBC9kfCErap_98g8lg63kW-2g2KTXmpLqd2chicPhk9wShdoSLEkA/exec';
+
+function goTo(page,el){
+  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){n.classList.remove('active');});
+  document.querySelectorAll('.page-content').forEach(function(p){p.style.display='none';});
+  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){
+    if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+page+"'"))
+      n.classList.add('active');
+  });
+  var t=document.getElementById('page-'+page);
+  if(t){t.style.display='flex';}
+  currentPage=page;
+  var titleEl=document.getElementById('page-title');
+  if(titleEl) titleEl.textContent=pageTitles[page]||page;
+  if(page==='dashboard') renderDashboard();
+  if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
+  if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
+}
+var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwGEf_xqe3R24V1aHrRx2QSJls2iriwcqyFK_4ABhQSoZgTPG2Wnfw8ZFkt0ygy72txpA/exec';
 var syncPending=false;
 var syncTimer=null;
 var currentPage='patients';
@@ -4978,14 +4994,20 @@ function autoSync(){
   syncTimer=setTimeout(function(){pushToSheet(true);},2000);
 }
 
+// Always returns today as YYYY-MM-DD in device local timezone
+function localDateStr(d){
+  var dt=d||new Date();
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+
 function normalizeDate(s){
   if(!s) return '';
   s=String(s).trim();
+  // Already YYYY-MM-DD — return as-is, never parse
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // For any other format, parse and use LOCAL time methods
   var d=new Date(s);
-  if(!isNaN(d.getTime())){
-    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  }
+  if(!isNaN(d.getTime())) return localDateStr(d);
   return s;
 }
 function fixRecordDates(arr){
@@ -5008,7 +5030,7 @@ function pushToSheet(silent){
   fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
   .then(function(r){return r.json();})
   .then(function(d){
-    if(d.status==='ok') showSyncStatus('Synced','#27ae60');
+    if(d.status==='ok'||d.ok) showSyncStatus('Synced','#27ae60');
     else showSyncStatus('Sync error','#c0392b');
   })
   .catch(function(){showSyncStatus('Offline - saved locally','#e67e22');});
@@ -5017,7 +5039,7 @@ function pushToSheet(silent){
 function pullFromSheet(){
   if(!SCRIPT_URL) return;
   showSyncStatus('Loading...','#e67e22');
-  fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'pull'})})
+  fetch(SCRIPT_URL+'?action=pull')
   .then(function(r){return r.json();})
   .then(function(d){
     if(d.status!=='ok'){showSyncStatus('Error','#c0392b');return;}
