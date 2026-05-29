@@ -173,7 +173,7 @@ input, select, textarea{
   letter-spacing:0.14em;text-transform:uppercase;color:#fff;
   flex-shrink:0;
 }
-.form-body{padding:16px 18px;display:flex;flex-direction:column;gap:13px;flex:1}
+.form-body{padding:16px 18px;display:flex;flex-direction:column;gap:13px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .f-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .f-group{display:flex;flex-direction:column;gap:4px}
 .f-label{font-size:0.66rem;font-weight:700;color:#5a8a82;letter-spacing:0.07em;text-transform:uppercase}
@@ -313,8 +313,6 @@ input, select, textarea{
   <div id="login-pin-section" style="display:none;width:100%;max-width:280px;margin-top:24px">
     <div id="login-role-label" style="color:rgba(255,255,255,0.8);font-size:0.82rem;font-weight:600;margin-bottom:12px;text-align:center"></div>
     <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px" id="pin-dots">
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
       <div class="pin-dot"></div>
       <div class="pin-dot"></div>
       <div class="pin-dot"></div>
@@ -468,8 +466,8 @@ input, select, textarea{
               <label class="f-label">Pt Name</label>
               <input class="f-input" type="text" id="f-remark" placeholder="Patient name"/>
             </div>
+            <button class="f-btn" id="f-submit" onclick="saveEntry()" style="margin-top:4px">+ Save Entry</button>
           </div>
-          <button class="f-btn" id="f-submit" onclick="saveEntry()">+ Save Entry</button>
         </div>
 
         <!-- COL 3: TABLE -->
@@ -726,6 +724,7 @@ input, select, textarea{
         <!-- New Entry -->
         <div style="display:flex;justify-content:center;padding:20px 16px 12px">
           <button onclick="openInvNewEntry()" style="background-color:#1f4e4a;color:#fff;border:none;border-radius:10px;padding:12px 40px;font-size:0.9rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(31,78,74,0.2)">+ New Entry</button>
+          <button onclick="debugStock()" style="background-color:#e67e22;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:0.9rem;font-weight:700;cursor:pointer;font-family:inherit;margin-left:8px">Debug</button>
         </div>
 
         <!-- 4 Tab Boxes -->
@@ -1545,7 +1544,7 @@ function secretTap(){
 }
 
 
-const PINS={admin:'Smile2024',cashier:'2222',pharmacy:'3333',inventory:'4444'};
+const PINS={admin:'000113',cashier:'2222',pharmacy:'3333',inventory:'4444'};
 const ROLE_LABELS={admin:'Admin',cashier:'Cashier',pharmacy:'Pharmacy',inventory:'Inventory'};
 let currentRole=null;
 let pinEntry='';
@@ -1566,12 +1565,12 @@ function backRole(){
   selectedRole=null;pinEntry='';
 }
 function pinKey(k){
-  if(pinEntry.length>=8)return;
+  if(pinEntry.length>=6)return;
   pinEntry+=k;
   updatePinDots();
   if(pinEntry===PINS[selectedRole]){
     setTimeout(function(){doLogin(selectedRole);},200);
-  } else if(pinEntry.length>=8){
+  } else if(pinEntry.length>=6){
     document.getElementById('pin-error').style.display='block';
     setTimeout(function(){pinEntry='';updatePinDots();document.getElementById('pin-error').style.display='none';},1000);
   }
@@ -3037,34 +3036,116 @@ function openInvNewEntry(){
   overlay.id='inv-entry-modal';
   overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:90vh;border-radius:20px 20px 0 0;overflow-y:auto">'
-    +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center">'
+  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:92vh;border-radius:20px 20px 0 0;display:flex;flex-direction:column">'
+    +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
     +'<span style="color:#fff;font-size:0.72rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase">New Stock Entry</span>'
-    +'<button onclick="document.getElementById(\'inv-entry-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.9rem;font-weight:700">X</button>'
+    +'<button onclick="document.getElementById(\'inv-entry-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.85rem;font-weight:700">X</button>'
     +'</div>'
-    +'<div style="padding:18px 20px;display:flex;flex-direction:column;gap:13px">'
+    +'<div style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding:18px 20px;display:flex;flex-direction:column;gap:13px">'
     +'<div class="f-group"><label class="f-label">Date *</label><input class="f-input" type="date" id="isn-date"/></div>'
-    +'<div class="f-group"><label class="f-label">Supplier *</label><input class="f-input" type="text" id="isn-supplier" placeholder="Supplier name"/></div>'
-    +'<div class="f-group"><label class="f-label">Items *</label><input class="f-input" type="text" id="isn-items" placeholder="Item name"/></div>'
-    +'<div class="f-group"><label class="f-label">Quantity *</label><input class="f-input" type="number" id="isn-qty" placeholder="e.g. 10" min="0"/></div>'
-    +'<div class="f-group"><label class="f-label">Price (¥) *</label><input class="f-input" type="number" id="isn-price" placeholder="e.g. 500" min="0"/></div>'
-    +'<button class="f-btn" style="margin:4px 0 8px" onclick="saveInvStock()">+ Save Entry</button>'
-    +'</div></div>';
+    +'<div class="f-group"><label class="f-label">Supplier / Voucher *</label><input class="f-input" type="text" id="isn-supplier" placeholder="Supplier or voucher name"/></div>'
+    +'<div style="border-top:1px solid #e0eeea;padding-top:12px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<label class="f-label" style="margin:0">Items</label>'
+    +'<button id="isn-add-item-btn" style="padding:4px 12px;border:none;border-radius:6px;background:#1f4e4a;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:inherit">+ Add Item</button>'
+    +'</div>'
+    +'<div id="isn-items-list" style="display:flex;flex-direction:column;gap:10px"></div>'
+    +'</div>'
+    +'</div>'
+    +'<div id="isn-footer" style="padding:12px 20px;flex-shrink:0;border-top:1px solid #e0eeea">'
+    +'</div>'
+    +'</div>';
   document.body.appendChild(overlay);
   document.getElementById('isn-date').valueAsDate=new Date();
+  // Save button via createElement to avoid iOS inline onclick issues
+  var saveBtn=document.createElement('button');
+  saveBtn.className='f-btn';
+  saveBtn.textContent='+ Save Entry';
+  saveBtn.style.width='100%';
+  saveBtn.onclick=saveInvStock;
+  document.getElementById('isn-footer').appendChild(saveBtn);
+  document.getElementById('isn-add-item-btn').onclick=addStockItemRow;
+  addStockItemRow();
+}
+
+function addStockItemRow(){
+  const list=document.getElementById('isn-items-list');
+  if(!list)return;
+  const row=document.createElement('div');
+  row.style.cssText='background:#f8fdfc;border:1px solid #d0e8e0;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;position:relative';
+
+  const delBtn=document.createElement('button');
+  delBtn.innerHTML='✕';
+  delBtn.style.cssText='position:absolute;top:8px;right:8px;background:#fde4e2;border:none;border-radius:50%;width:22px;height:22px;font-size:0.75rem;cursor:pointer;color:#c0392b;font-weight:700';
+  delBtn.onclick=function(){row.remove();};
+
+  // Category select
+  const catLabel=document.createElement('label');catLabel.className='f-label';catLabel.textContent='Category *';
+  const catSel=document.createElement('select');catSel.className='f-input';
+  catSel.innerHTML='<option value="">-- Select --</option><option value="dental">Dental</option><option value="implant">Implant</option><option value="general">General</option><option value="lab">Lab</option>';
+
+  // Item name text input
+  const itemLabel=document.createElement('label');itemLabel.className='f-label';itemLabel.textContent='Item Name *';
+  const itemInput=document.createElement('input');
+  itemInput.className='f-input';itemInput.type='text';itemInput.placeholder='Type item name';
+
+  // Qty
+  const qtyLabel=document.createElement('label');qtyLabel.className='f-label';qtyLabel.textContent='Qty *';
+  const qtyInput=document.createElement('input');
+  qtyInput.className='f-input';qtyInput.type='number';qtyInput.placeholder='e.g. 10';qtyInput.min='0';
+
+  // Price
+  const priceLabel=document.createElement('label');priceLabel.className='f-label';priceLabel.textContent='Price (¥) *';
+  const priceInput=document.createElement('input');
+  priceInput.className='f-input';priceInput.type='number';priceInput.placeholder='e.g. 500';priceInput.min='0';
+
+  const qtyPriceRow=document.createElement('div');
+  qtyPriceRow.style.cssText='display:flex;gap:10px';
+  const qtyWrap=document.createElement('div');qtyWrap.style.flex='1';
+  qtyWrap.appendChild(qtyLabel);qtyWrap.appendChild(qtyInput);
+  const priceWrap=document.createElement('div');priceWrap.style.flex='1';
+  priceWrap.appendChild(priceLabel);priceWrap.appendChild(priceInput);
+  qtyPriceRow.appendChild(qtyWrap);qtyPriceRow.appendChild(priceWrap);
+
+  row.appendChild(delBtn);
+  row.appendChild(catLabel);row.appendChild(catSel);
+  row.appendChild(itemLabel);row.appendChild(itemInput);
+  row.appendChild(qtyPriceRow);
+  list.appendChild(row);
 }
 
 function saveInvStock(){
   const date=document.getElementById('isn-date').value;
   const supplier=document.getElementById('isn-supplier').value.trim();
-  const items=document.getElementById('isn-items').value.trim();
-  const qty=document.getElementById('isn-qty').value;
-  const price=document.getElementById('isn-price').value;
-  if(!date||!supplier||!items||!qty||!price){alert('Please fill all fields');return;}
-  invStockIn.push({date,supplier,items,qty,price});
+  if(!date||!supplier){alert('Please fill Date and Supplier');return;}
+  const rows=document.getElementById('isn-items-list').children;
+  if(rows.length===0){alert('Please add at least one item');return;}
+  let saved=0;
+  Array.from(rows).forEach(function(row){
+    const catSel=row.querySelector('select');
+    const allInputs=row.querySelectorAll('input');
+    const category=catSel?catSel.value:'';
+    const itemName=allInputs[0]?allInputs[0].value.trim():'';
+    const qty=allInputs[1]?allInputs[1].value:'';
+    const price=allInputs[2]?allInputs[2].value:'';
+    if(category&&itemName&&qty&&price){
+      invStockIn.push({date,supplier,items:itemName,qty,price,category});
+      if(!invLedgerItems[category]) invLedgerItems[category]=[];
+      if(!invLedgerItems[category].includes(itemName)) invLedgerItems[category].push(itemName);
+      saved++;
+    }
+  });
+  if(saved===0){alert('Please complete at least one item row with all fields');return;}
   LS.set('invStockIn',JSON.stringify(invStockIn));
+  saveInvLedger();
   document.getElementById('inv-entry-modal').remove();
   renderInvStockIn();
+  // Switch to ledger tab showing first saved category
+  var firstCat=invStockIn[invStockIn.length-1].category||'dental';
+  invLedgerYear=new Date().getFullYear();
+  updateInvLedgerYearLabel();
+  switchInvLedger(firstCat, document.getElementById('invl-'+firstCat));
+  switchInvTab('ledger', null);
 }
 
 // Inventory Ledger
@@ -3080,6 +3161,7 @@ function saveInvLedger(){
   LS.set('invLedgerItems', JSON.stringify(invLedgerItems));
 }
 
+
 function updateInvLedgerYearLabel(){
   const el=document.getElementById('invl-year-label');
   if(el) el.textContent=invLedgerYear;
@@ -3089,6 +3171,20 @@ function changeInvLedgerYear(dir){
   updateInvLedgerYearLabel();
   renderInvLedger(invLedgerTab);
 }
+
+// Fix ledger items - ensure items are in correct category based on stockIn records
+function fixLedgerItemCategories(){
+  // For each stockIn record with a category, ensure item is in that category only
+  invStockIn.forEach(function(r){
+    if(!r.category||!r.items) return;
+    var cat=r.category;
+    var item=r.items;
+    if(!invLedgerItems[cat]) invLedgerItems[cat]=[];
+    if(!invLedgerItems[cat].includes(item)) invLedgerItems[cat].push(item);
+  });
+  saveInvLedger();
+}
+fixLedgerItemCategories();
 
 function renderInvLedger(cat){
   const thead=document.getElementById('invl-thead-'+cat);
@@ -3130,9 +3226,15 @@ function renderInvLedger(cat){
     for(var mi=0;mi<12;mi++){
       var monthNum=mi+1;
       var cur=data[monthNum]||{};
-      var mStr=invLedgerYear+'-'+String(monthNum).padStart(2,'0');
-      // In = auto from Stock In
-      var inQty=invStockIn.filter(function(r){return r.items===item&&r.date&&r.date.startsWith(mStr);}).reduce(function(s,r){return s+Number(r.qty||0);},0);
+      var mStr=String(invLedgerYear)+'-'+String(monthNum).padStart(2,'0');
+      // In = sum from Stock In for this item+category+month
+      var inQty=0;
+      for(var si=0;si<invStockIn.length;si++){
+        var sr=invStockIn[si];
+        if(sr.items===item && sr.date && sr.date.indexOf(mStr)===0 && (!sr.category||sr.category===cat)){
+          inQty+=Number(sr.qty||0);
+        }
+      }
       var bal=cur.balance!==undefined&&cur.balance!==''?Number(cur.balance):'';
 
       if(mi===0){
