@@ -5126,6 +5126,8 @@ function pushToSheet(silent){
 
 function pullFromSheet(){
   if(!SCRIPT_URL) return;
+  // Cancel any pending auto-sync so pulled data isn't overwritten
+  clearTimeout(syncTimer);
   showSyncStatus('Loading...','#e67e22');
   fetch(SCRIPT_URL+'?action=pull')
   .then(function(r){return r.json();})
@@ -5140,11 +5142,12 @@ function pullFromSheet(){
     if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
     if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
 
-    // Unflatten caseRecords
-    if(d.caseRecordsFlat&&d.caseRecordsFlat.length){
+    // Unflatten caseRecords — always process if key exists in response
+    if(d.hasOwnProperty('caseRecordsFlat')){
       var cr={fixed:[],removable:[],implant:[],ortho:[]};
-      d.caseRecordsFlat.forEach(function(row){
+      (d.caseRecordsFlat||[]).forEach(function(row){
         var cat=row.category;
+        if(!cat) return;
         if(!cr[cat]) cr[cat]=[];
         var rec={};
         Object.keys(row).forEach(function(k){
@@ -5152,7 +5155,6 @@ function pullFromSheet(){
           if(k==='depositLog'){
             try{
               var dl=JSON.parse(row[k]);
-              // Normalize dates inside depositLog entries
               rec[k]=(dl||[]).map(function(entry){
                 var e={};
                 Object.keys(entry).forEach(function(ek){
@@ -5165,12 +5167,13 @@ function pullFromSheet(){
             rec[k]=row[k];
           }
         });
-        // Normalize all date fields on the record
         rec=fixRecordDates([rec])[0];
         cr[cat].push(rec);
       });
       caseRecords=cr;
       LS.set('caseRecords',JSON.stringify(caseRecords));
+    } else {
+      caseRecords=JSON.parse(LS.get('caseRecords')||'null')||{fixed:[],removable:[],implant:[],ortho:[]};
     }
 
     // Unflatten expNames
@@ -5222,6 +5225,8 @@ function pullFromSheet(){
     }
 
     showSyncStatus('Up to date','#27ae60');
+    // Force re-render case tables with fresh data regardless of current page
+    ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
     goTo(currentPage,null);
   })
   .catch(function(){showSyncStatus('Offline','#e67e22');});
