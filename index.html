@@ -5150,11 +5150,23 @@ function pullFromSheet(){
         Object.keys(row).forEach(function(k){
           if(k==='category') return;
           if(k==='depositLog'){
-            try{rec[k]=JSON.parse(row[k]);}catch(e){rec[k]=[];}
+            try{
+              var dl=JSON.parse(row[k]);
+              // Normalize dates inside depositLog entries
+              rec[k]=(dl||[]).map(function(entry){
+                var e={};
+                Object.keys(entry).forEach(function(ek){
+                  e[ek]=(ek==='date')?normalizeDate(entry[ek]):entry[ek];
+                });
+                return e;
+              });
+            }catch(e){rec[k]=[];}
           } else {
             rec[k]=row[k];
           }
         });
+        // Normalize all date fields on the record
+        rec=fixRecordDates([rec])[0];
         cr[cat].push(rec);
       });
       caseRecords=cr;
