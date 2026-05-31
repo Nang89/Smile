@@ -1597,6 +1597,8 @@ function doLogin(role){
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
   // Auto-pull on login then every 30s
+  // Cancel any pending autoSync so startup pull isn't overwritten by empty-data push
+  clearTimeout(syncTimer);
   setTimeout(function(){pullFromSheet();},1500);
   setInterval(function(){pullFromSheet();},30000);
 }
@@ -4508,12 +4510,11 @@ function saveCaseEntry(){
     depositLog:[]
   };
 
-  // If initial deposit entered, add it to the log
+  // If initial deposit entered, add to depositLog and DailyRecords
   const initDeposit=document.getElementById('cf-deposit').value;
   const initDate=document.getElementById('cf-date').value;
   if(initDeposit && Number(initDeposit)>0){
     rec.depositLog.push({amount:initDeposit, date:initDate, note:'Initial deposit'});
-    // Auto-add to daily records
     const dailyRec={
       date: initDate,
       on: rec.newold||'',
@@ -4524,7 +4525,7 @@ function saveCaseEntry(){
     };
     records.push(dailyRec);
     LS.set('dental-records', JSON.stringify(records));
-  autoSync();
+    autoSync();
     render();
     updateBadges();
   }
@@ -4532,8 +4533,6 @@ function saveCaseEntry(){
   caseRecords[caseType].push(rec);
   saveCaseRecords();
   renderCaseTable(caseType);
-  switchCaseTab(caseType, document.getElementById('ctab-'+caseType));
-  closeCaseModalBtn();
   switchCaseTab(caseType, document.getElementById('ctab-'+caseType));
   closeCaseModalBtn();
 }
@@ -4549,12 +4548,23 @@ function renderCaseTable(caseType){
   tbody.innerHTML='';
   const tdStyle='padding:11px 10px;border-bottom:1px solid #daeee6;color:#1c2c2e;background-color:transparent;font-size:0.85rem';
 
-  // Always read fresh from global variable
-  if(!caseRecords[caseType]) return;
+  // Use in-memory caseRecords — only fall back to localStorage if null
+  if(!caseRecords){
+    caseRecords=JSON.parse(LS.get('caseRecords')||'null')||{fixed:[],removable:[],implant:[],ortho:[]};
+  }
+  if(!caseRecords[caseType] || !caseRecords[caseType].length){
+    return;
+  }
 
-  // Apply year and done filter
+  // Apply year and done filter — robust date parsing
   const filtered = caseRecords[caseType].filter((r,i)=>{
-    const recYear = r.date ? parseInt(r.date.split('-')[0]) : null;
+    var dateStr = String(r.date||'').trim();
+    var recYear = null;
+    if(dateStr){
+      // Handle YYYY-MM-DD or YYYY/MM/DD or any format starting with 4-digit year
+      var m = dateStr.match(/^(\d{4})/);
+      recYear = m ? parseInt(m[1]) : null;
+    }
     if(recYear !== caseYear) return false;
     if(caseFilter==='done') return r.done===true;
     if(caseFilter==='notdone') return r.done!==true;
@@ -4985,7 +4995,11 @@ function goTo(page,el){
   if(page==='dashboard') renderDashboard();
   if(page==='patients'){render();}
   if(page==='cases'){
-    caseRecords=JSON.parse(LS.get('caseRecords')||'null')||{fixed:[],removable:[],implant:[],ortho:[]};
+    // Use in-memory caseRecords (already up to date from pull/save)
+    // Only fall back to localStorage if memory is completely empty
+    if(!caseRecords || (!caseRecords.fixed && !caseRecords.removable && !caseRecords.implant && !caseRecords.ortho)){
+      caseRecords=JSON.parse(LS.get('caseRecords')||'null')||{fixed:[],removable:[],implant:[],ortho:[]};
+    }
     ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
   }
   if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
@@ -5036,6 +5050,16 @@ function fixRecordDates(arr){
 
 function pushToSheet(silent){
   if(!SCRIPT_URL) return;
+  // Safety guard: never push if all core data is empty (prevents wiping sheet on fresh load)
+  var hasData = (records&&records.length) ||
+                (caseRecords&&(['fixed','removable','implant','ortho'].some(function(t){return caseRecords[t]&&caseRecords[t].length;}))) ||
+                (pharmacyIncome&&pharmacyIncome.length) ||
+                (pharmacyPurchase&&pharmacyPurchase.length) ||
+                (invStockIn&&invStockIn.length);
+  if(!hasData){
+    showSyncStatus('No data to push','#e67e22');
+    return;
+  }
   if(!silent) showSyncStatus('Syncing...','#e67e22');
 
   // Flatten caseRecords: [{category, date, name, treat, ...depositLog as JSON}]
@@ -5142,11 +5166,12 @@ function pullFromSheet(){
     if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
     if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
 
-    // Unflatten caseRecords — always process if key exists in response
-    if(d.hasOwnProperty('caseRecordsFlat')){
+    // Unflatten caseRecords
+    var crf=d.caseRecordsFlat;
+    if(crf && crf.length){
       var cr={fixed:[],removable:[],implant:[],ortho:[]};
-      (d.caseRecordsFlat||[]).forEach(function(row){
-        var cat=row.category;
+      crf.forEach(function(row){
+        var cat=String(row.category||'').trim().toLowerCase();
         if(!cat) return;
         if(!cr[cat]) cr[cat]=[];
         var rec={};
@@ -5154,7 +5179,7 @@ function pullFromSheet(){
           if(k==='category') return;
           if(k==='depositLog'){
             try{
-              var dl=JSON.parse(row[k]);
+              var dl=typeof row[k]==='string'?JSON.parse(row[k]):row[k];
               rec[k]=(dl||[]).map(function(entry){
                 var e={};
                 Object.keys(entry).forEach(function(ek){
@@ -5172,9 +5197,8 @@ function pullFromSheet(){
       });
       caseRecords=cr;
       LS.set('caseRecords',JSON.stringify(caseRecords));
-    } else {
-      caseRecords=JSON.parse(LS.get('caseRecords')||'null')||{fixed:[],removable:[],implant:[],ortho:[]};
     }
+    // If pull returns no caseRecordsFlat, keep whatever is already in memory/localStorage
 
     // Unflatten expNames
     if(d.expNamesFlat&&d.expNamesFlat.length){
