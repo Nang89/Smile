@@ -1597,10 +1597,13 @@ function doLogin(role){
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
   // Auto-pull on login then every 30s
-  // Cancel any pending autoSync so startup pull isn't overwritten by empty-data push
-  clearTimeout(syncTimer);
   setTimeout(function(){pullFromSheet();},1500);
-  setInterval(function(){pullFromSheet();},30000);
+  setInterval(function(){
+    // Only auto-pull if no push is in progress or pending
+    if(!isPushing && !pushPending && !syncTimer){
+      pullFromSheet(true);
+    }
+  },30000);
 }
 function logout(){
   currentRole=null;selectedRole=null;pinEntry='';
@@ -1963,8 +1966,11 @@ function editRec(i){
 
 function delRec(i){
   records.splice(i,1);
+  LS.set('dental-records',JSON.stringify(records));
+  appFullyLoaded=true;
   if(editIdx===i){editIdx=-1;resetForm();document.getElementById('f-submit').textContent='+ Save Entry';}
   render();updateBadges();
+  autoSync();
 }
 
 
@@ -2988,6 +2994,7 @@ function renderInvStockIn(){
         invStockIn.splice(parseInt(this.getAttribute('data-idx')),1);
         LS.set('invStockIn',JSON.stringify(invStockIn));
         renderInvStockIn();
+        autoSync();
       };
 
       const actionTd=document.createElement('td');
@@ -3785,6 +3792,7 @@ function renderPhIncome(){
         pharmacyIncome.splice(parseInt(this.getAttribute('data-idx')),1);
         LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));
         renderPhIncome();
+        autoSync();
       };
 
       const actionTd=document.createElement('td');
@@ -3950,6 +3958,7 @@ function renderPhPurchase(){
         pharmacyPurchase.splice(idx,1);
         LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
         renderPhPurchase();
+        autoSync();
       };
       const actionTd=document.createElement('td');
       actionTd.style.cssText=tdC+';white-space:nowrap';
@@ -4116,6 +4125,7 @@ function renderPhExpend(){
         pharmacyExpend.splice(parseInt(this.getAttribute('data-idx')),1);
         LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));
         renderPhExpend();
+        autoSync();
       };
 
       const actionTd=document.createElement('td');
@@ -4515,23 +4525,22 @@ function saveCaseEntry(){
   const initDate=document.getElementById('cf-date').value;
   if(initDeposit && Number(initDeposit)>0){
     rec.depositLog.push({amount:initDeposit, date:initDate, note:'Initial deposit'});
-    const dailyRec={
+    records.push({
       date: initDate,
       on: rec.newold||'',
       cas: rec.treat,
       price: initDeposit,
       doctor: rec.drname||'',
       ptname: rec.name
-    };
-    records.push(dailyRec);
+    });
     LS.set('dental-records', JSON.stringify(records));
-    autoSync();
-    render();
-    updateBadges();
   }
 
+  // Save case record — single autoSync covers both records and caseRecords
   caseRecords[caseType].push(rec);
   saveCaseRecords();
+  render();
+  updateBadges();
   renderCaseTable(caseType);
   switchCaseTab(caseType, document.getElementById('ctab-'+caseType));
   closeCaseModalBtn();
@@ -4539,6 +4548,7 @@ function saveCaseEntry(){
 
 function saveCaseRecords(){
   LS.set('caseRecords', JSON.stringify(caseRecords));
+  appFullyLoaded=true;
   autoSync();
 }
 
@@ -4566,8 +4576,9 @@ function renderCaseTable(caseType){
       recYear = m ? parseInt(m[1]) : null;
     }
     if(recYear !== caseYear) return false;
-    if(caseFilter==='done') return r.done===true;
-    if(caseFilter==='notdone') return r.done!==true;
+    var isDoneVal=(r.done===true||r.done==='true');
+    if(caseFilter==='done') return isDoneVal;
+    if(caseFilter==='notdone') return !isDoneVal;
     return true;
   });
 
@@ -4582,7 +4593,7 @@ function renderCaseTable(caseType){
     const remainingTd=document.createElement('td');
     remainingTd.style.cssText=tdStyle+';position:relative;min-width:140px';
 
-    var isDone = r.done === true;
+    var isDone = (r.done===true||r.done==='true');
     var doneDate = r.doneDate || '';
 
     if(remaining<=0 && totalAmt>0){
@@ -4674,7 +4685,7 @@ function openPaymentMenu(caseType, recIdx){
   if(old)old.remove();
 
   var r=caseRecords[caseType][recIdx];
-  var isDone=r.done===true;
+  var isDone=(r.done===true||r.done==='true');
 
   var overlay=document.createElement('div');
   overlay.id='pay-menu';
@@ -4899,7 +4910,29 @@ function addPaymentEntry(caseType,recIdx){
 }
 
 function removePaymentEntry(caseType,recIdx,entryIdx){
-  caseRecords[caseType][recIdx].depositLog.splice(entryIdx,1);
+  var rec=caseRecords[caseType][recIdx];
+  var entry=rec.depositLog[entryIdx];
+  // Remove matching daily record by date + ptname + cas + price
+  if(entry){
+    var before=records.length;
+    var removed=false;
+    records=records.filter(function(r){
+      // Match once only — remove only the first matching daily record
+      if(!removed && r.ptname===rec.name && r.cas===rec.treat &&
+         r.date===entry.date && String(r.price)===String(entry.amount)){
+        removed=true;
+        return false;
+      }
+      return true;
+    });
+    if(records.length!==before){
+      LS.set('dental-records',JSON.stringify(records));
+      render();
+      updateBadges();
+    }
+  }
+  rec.depositLog.splice(entryIdx,1);
+  appFullyLoaded=true; // ensure push is never blocked on delete
   saveCaseRecords();
   document.getElementById('payment-popup').remove();
   renderCaseTable(caseType);
@@ -4907,9 +4940,30 @@ function removePaymentEntry(caseType,recIdx,entryIdx){
 }
 
 function delCaseRec(caseType,i){
+  var rec=caseRecords[caseType][i];
+  // Remove all matching daily records (initial deposit + all payments)
+  if(rec){
+    var ptname=rec.name;
+    var cas=rec.treat;
+    var before=records.length;
+    records=records.filter(function(r){
+      return !(r.ptname===ptname && r.cas===cas);
+    });
+    if(records.length!==before){
+      LS.set('dental-records',JSON.stringify(records));
+      render();
+      updateBadges();
+    }
+  }
   caseRecords[caseType].splice(i,1);
-  saveCaseRecords();
+  LS.set('caseRecords',JSON.stringify(caseRecords));
+  appFullyLoaded=true;
   renderCaseTable(caseType);
+  // Debug: show what will be pushed
+  var remaining=caseRecords[caseType].length;
+  showSyncStatus('Deleting... ('+remaining+' left)','#e67e22');
+  console.log('delCaseRec: appFullyLoaded='+appFullyLoaded+' isPulling='+isPulling+' isPushing='+isPushing+' SCRIPT_URL='+!!SCRIPT_URL);
+  autoSync();
 }
 
 function editCaseRec(caseType,i){
@@ -5006,8 +5060,11 @@ function goTo(page,el){
   if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
 }
 var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwUmlrgVH3paeMgHNwSQ2J7jGnCgDVfwLHTOJOGk5FFxCZ8KfkH57XE7CyQsFx5xpvEHA/exec';
-var syncPending=false;
-var syncTimer=null;
+var syncTimer=null;        // debounce timer for push
+var isPushing=false;       // push in progress
+var isPulling=false;       // pull in progress
+var pushPending=false;     // a push was requested while pull was running
+var appFullyLoaded=false;  // true after first successful pull
 var currentPage='patients';
 
 function showSyncStatus(msg,color){
@@ -5017,12 +5074,22 @@ function showSyncStatus(msg,color){
   if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
 }
 
-// Called after any data change — debounced 2s to batch rapid saves
+// Called after any data change — debounced 1s, never cancelled by pull
 function autoSync(){
-  if(!SCRIPT_URL) return;
+  if(!SCRIPT_URL){ console.log('autoSync: no SCRIPT_URL'); return; }
+  if(!appFullyLoaded){ console.log('autoSync: blocked - not loaded'); return; }
   clearTimeout(syncTimer);
   showSyncStatus('Saving...','#e67e22');
-  syncTimer=setTimeout(function(){pushToSheet(true);},2000);
+  syncTimer=setTimeout(function(){
+    syncTimer=null;
+    console.log('autoSync timer fired: isPulling='+isPulling+' isPushing='+isPushing);
+    if(isPulling){
+      pushPending=true;
+      console.log('autoSync: push deferred (pull in progress)');
+    } else {
+      pushToSheet(true);
+    }
+  },1000);
 }
 
 function normalizeDate(s){
@@ -5050,14 +5117,9 @@ function fixRecordDates(arr){
 
 function pushToSheet(silent){
   if(!SCRIPT_URL) return;
-  // Safety guard: never push if all core data is empty (prevents wiping sheet on fresh load)
-  var hasData = (records&&records.length) ||
-                (caseRecords&&(['fixed','removable','implant','ortho'].some(function(t){return caseRecords[t]&&caseRecords[t].length;}))) ||
-                (pharmacyIncome&&pharmacyIncome.length) ||
-                (pharmacyPurchase&&pharmacyPurchase.length) ||
-                (invStockIn&&invStockIn.length);
-  if(!hasData){
-    showSyncStatus('No data to push','#e67e22');
+  // Safety guard: never push before first pull completes (prevents wiping sheet on fresh load)
+  if(!appFullyLoaded){
+    showSyncStatus('Waiting for sync...','#e67e22');
     return;
   }
   if(!silent) showSyncStatus('Syncing...','#e67e22');
@@ -5139,19 +5201,35 @@ function pushToSheet(silent){
     invLedgerDataFlat:invLedgerDataFlat
   };
 
+  isPushing=true;
   fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
   .then(function(r){return r.json();})
   .then(function(d){
-    if(d.status==='ok'||d.ok) showSyncStatus('Synced','#27ae60');
-    else showSyncStatus('Sync error','#c0392b');
+    isPushing=false;
+    if(d.status==='ok'||d.ok){
+      showSyncStatus('Synced','#27ae60');
+      // After successful push, pull to confirm sheet matches memory
+      setTimeout(function(){pullFromSheet(true);},500);
+    } else {
+      showSyncStatus('Sync error','#c0392b');
+    }
   })
-  .catch(function(){showSyncStatus('Offline - saved locally','#e67e22');});
+  .catch(function(){
+    isPushing=false;
+    showSyncStatus('Offline - saved locally','#e67e22');
+  });
 }
 
-function pullFromSheet(){
+function pullFromSheet(silent){
   if(!SCRIPT_URL) return;
-  // Cancel any pending auto-sync so pulled data isn't overwritten
-  clearTimeout(syncTimer);
+  // If a push is in progress, wait for it to finish then pull
+  if(isPushing){
+    setTimeout(function(){pullFromSheet(silent);},1000);
+    return;
+  }
+  // Don't cancel push timer — if user changed data, let it push first
+  if(!silent) clearTimeout(syncTimer);
+  isPulling=true;
   showSyncStatus('Loading...','#e67e22');
   fetch(SCRIPT_URL+'?action=pull')
   .then(function(r){return r.json();})
@@ -5193,6 +5271,8 @@ function pullFromSheet(){
           }
         });
         rec=fixRecordDates([rec])[0];
+        // Convert string booleans back to real booleans
+        rec.done = (rec.done==='true'||rec.done===true);
         cr[cat].push(rec);
       });
       caseRecords=cr;
@@ -5249,11 +5329,21 @@ function pullFromSheet(){
     }
 
     showSyncStatus('Up to date','#27ae60');
-    // Force re-render case tables with fresh data regardless of current page
+    appFullyLoaded=true;
+    isPulling=false;
+    // Force re-render case tables with fresh data
     ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
     goTo(currentPage,null);
+    // If a push was requested while pull was running, push now
+    if(pushPending){
+      pushPending=false;
+      setTimeout(function(){pushToSheet(true);},500);
+    }
   })
-  .catch(function(){showSyncStatus('Offline','#e67e22');});
+  .catch(function(){
+    isPulling=false;
+    showSyncStatus('Offline','#e67e22');
+  });
 }
 
 function openSyncSettings(){
