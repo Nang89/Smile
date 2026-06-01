@@ -1665,9 +1665,9 @@ function localDateStr(d){
 }
 
 const LS = {
-  get: function(k){try{return LS.get(k);}catch(e){return null;}},
-  set: function(k,v){try{LS.set(k,v);}catch(e){}},
-  remove: function(k){try{LS.remove(k);}catch(e){}}
+  get: function(k){try{return localStorage.getItem(k);}catch(e){return null;}},
+  set: function(k,v){try{localStorage.setItem(k,v);}catch(e){}},
+  remove: function(k){try{localStorage.removeItem(k);}catch(e){}}
 };
 // -- CASE & DOCTOR LISTS --
 const DEFAULT_CASES=['E/A','Impaction','Filling','RCT','R-filling'];
@@ -4400,10 +4400,10 @@ const CASE_TREATMENTS = {
   ortho:    ['Add Text']
 };
 let caseTreatmentLists = JSON.parse(LS.get('caseTreatLists') || 'null') || JSON.parse(JSON.stringify(CASE_TREATMENTS));
-let caseRecords = JSON.parse(LS.get('caseRecords') || 'null') || {fixed:[], removable:[], implant:[], ortho:[]};
+var caseRecords = JSON.parse(LS.get('caseRecords') || 'null') || {fixed:[], removable:[], implant:[], ortho:[]};
 // Must be declared before renderCaseTable is called
-let caseYear = new Date().getFullYear();
-let caseFilter = 'all';
+var caseYear = new Date().getFullYear();
+var caseFilter = 'all';
 ['fixed','removable','implant','ortho'].forEach(t=>renderCaseTable(t));
 renderIncomeMonthly();
 renderYearlyReport();
@@ -4962,7 +4962,6 @@ function delCaseRec(caseType,i){
   // Debug: show what will be pushed
   var remaining=caseRecords[caseType].length;
   showSyncStatus('Deleting... ('+remaining+' left)','#e67e22');
-  console.log('delCaseRec: appFullyLoaded='+appFullyLoaded+' isPulling='+isPulling+' isPushing='+isPushing+' SCRIPT_URL='+!!SCRIPT_URL);
   autoSync();
 }
 
@@ -5059,12 +5058,14 @@ function goTo(page,el){
   if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
   if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
 }
-var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbwUmlrgVH3paeMgHNwSQ2J7jGnCgDVfwLHTOJOGk5FFxCZ8KfkH57XE7CyQsFx5xpvEHA/exec';
+var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbxHNlEppWjIK1noC7ekTfQH-5A_oSRYMj68giAPaPgv4s_gNwQ1E3bmO-3Oak4klikZ5Q/exec';
 var syncTimer=null;        // debounce timer for push
 var isPushing=false;       // push in progress
 var isPulling=false;       // pull in progress
 var pushPending=false;     // a push was requested while pull was running
 var appFullyLoaded=false;  // true after first successful pull
+var lastPushTime=0;        // timestamp of last successful push
+var dataDirty=false;       // true if local data changed but not yet confirmed saved to sheet
 var currentPage='patients';
 
 function showSyncStatus(msg,color){
@@ -5074,22 +5075,18 @@ function showSyncStatus(msg,color){
   if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
 }
 
-// Called after any data change — debounced 1s, never cancelled by pull
+// Called after any data change — pushes immediately
 function autoSync(){
-  if(!SCRIPT_URL){ console.log('autoSync: no SCRIPT_URL'); return; }
-  if(!appFullyLoaded){ console.log('autoSync: blocked - not loaded'); return; }
+  if(!SCRIPT_URL) return;
+  if(!appFullyLoaded) return;
+  dataDirty=true;
   clearTimeout(syncTimer);
-  showSyncStatus('Saving...','#e67e22');
-  syncTimer=setTimeout(function(){
-    syncTimer=null;
-    console.log('autoSync timer fired: isPulling='+isPulling+' isPushing='+isPushing);
-    if(isPulling){
-      pushPending=true;
-      console.log('autoSync: push deferred (pull in progress)');
-    } else {
-      pushToSheet(true);
-    }
-  },1000);
+  syncTimer=null;
+  if(isPulling){
+    pushPending=true;
+  } else {
+    pushToSheet(true);
+  }
 }
 
 function normalizeDate(s){
@@ -5207,14 +5204,14 @@ function pushToSheet(silent){
   .then(function(d){
     isPushing=false;
     if(d.status==='ok'||d.ok){
+      lastPushTime=Date.now();
+      dataDirty=false;
       showSyncStatus('Synced','#27ae60');
-      // After successful push, pull to confirm sheet matches memory
-      setTimeout(function(){pullFromSheet(true);},500);
     } else {
       showSyncStatus('Sync error','#c0392b');
     }
   })
-  .catch(function(){
+  .catch(function(err){
     isPushing=false;
     showSyncStatus('Offline - saved locally','#e67e22');
   });
@@ -5222,19 +5219,33 @@ function pushToSheet(silent){
 
 function pullFromSheet(silent){
   if(!SCRIPT_URL) return;
-  // If a push is in progress, wait for it to finish then pull
+  // Wait if push is in progress
   if(isPushing){
-    setTimeout(function(){pullFromSheet(silent);},1000);
+    setTimeout(function(){pullFromSheet(silent);},1500);
     return;
   }
-  // Don't cancel push timer — if user changed data, let it push first
-  if(!silent) clearTimeout(syncTimer);
+  // Block pull for 5 seconds after a push to let sheet update
+  if(Date.now()-lastPushTime < 5000){
+    setTimeout(function(){pullFromSheet(silent);},5000);
+    return;
+  }
   isPulling=true;
   showSyncStatus('Loading...','#e67e22');
   fetch(SCRIPT_URL+'?action=pull')
   .then(function(r){return r.json();})
   .then(function(d){
     if(d.status!=='ok'){showSyncStatus('Error','#c0392b');return;}
+
+    // Only update globals from sheet if no local changes are pending
+    if(dataDirty){
+      showSyncStatus('Up to date','#27ae60');
+      appFullyLoaded=true;
+      isPulling=false;
+      ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+      goTo(currentPage,null);
+      if(pushPending){pushPending=false;setTimeout(function(){pushToSheet(true);},500);}
+      return;
+    }
 
     // Flat arrays
     if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
@@ -5343,6 +5354,11 @@ function pullFromSheet(silent){
   .catch(function(){
     isPulling=false;
     showSyncStatus('Offline','#e67e22');
+    // If a push was waiting for pull to finish, run it now
+    if(pushPending){
+      pushPending=false;
+      setTimeout(function(){pushToSheet(true);},500);
+    }
   });
 }
 
