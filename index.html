@@ -1598,8 +1598,8 @@ function doLogin(role){
   applyRoleAccess(role);
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
-  // Connect to Firebase on login
-  setTimeout(function(){firebaseConnect();},500);
+  // Connect to Firebase immediately on login
+  firebaseConnect();
   // Start auto backup scheduler
   scheduleAutoBackup();
   // Show last backup time in status bar
@@ -5074,7 +5074,7 @@ function goTo(page,el){
   currentPage=page;
   var titleEl=document.getElementById('page-title');
   if(titleEl) titleEl.textContent=pageTitles[page]||page;
-  if(page==='dashboard') setTimeout(renderDashboard, 100);
+  if(page==='dashboard') renderDashboard();
   if(page==='patients'){render();}
   if(page==='cases'){
     // Use in-memory caseRecords (already up to date from pull/save)
@@ -5143,15 +5143,41 @@ function initFirebase(){
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     fbDatabase=firebase.database();
 
+    var fbFirstLoad=true;
     // Listen to entire data node in real-time
     fbDatabase.ref('data').on('value',function(snapshot){
       var d=snapshot.val();
       applyFirebaseData(d);
-      appFullyLoaded=true;
       fbOnline=true;
       showSyncStatus('Connected','#27ae60');
       updateBadges();
-      goTo(currentPage,null);
+
+      if(fbFirstLoad){
+        // First load — fully render current page
+        fbFirstLoad=false;
+        appFullyLoaded=true;
+        // Re-render all UI now that data is loaded
+        render();
+        renderDashboard();
+        ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+        // Re-render current page specifically
+        if(currentPage==='patients') render();
+        else if(currentPage==='dashboard') renderDashboard();
+        else if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+        else if(currentPage==='patientreport') switchPtReport('ledger',document.getElementById('ptrep-ledger'));
+        else if(currentPage==='incomereport') switchIncomeTab('expenses',document.getElementById('inc-expenses'));
+        updateBadges();
+      } else {
+        // Subsequent real-time updates — only update data silently
+        // Re-render only if on the affected page to avoid interrupting user
+        appFullyLoaded=true;
+        updateBadges();
+        if(currentPage==='patients') render();
+        if(currentPage==='dashboard') renderDashboard();
+        if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+        if(currentPage==='patientreport') switchPtReport('ledger',document.getElementById('ptrep-ledger'));
+        if(currentPage==='incomereport') switchIncomeTab('expenses',document.getElementById('inc-expenses'));
+      }
       if(fbWritePending){fbWritePending=false;}
     },function(err){
       fbOnline=false;
@@ -5203,6 +5229,10 @@ function loadFromLocalStorage(){
   var ll=LS.get('lowStockAlerts');if(ll)lowStockAlerts=JSON.parse(ll);
   var lc=LS.get('caseRecords');if(lc)caseRecords=JSON.parse(lc);
   appFullyLoaded=true;
+  // Render all UI with local data
+  render();
+  renderDashboard();
+  ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
   updateBadges();
   goTo(currentPage,null);
 }
