@@ -1599,6 +1599,7 @@ function doLogin(role){
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
   // Connect to Firebase immediately on login
+  console.log('STARTUP records count:', records.length);
   firebaseConnect();
   // Start auto backup scheduler
   scheduleAutoBackup();
@@ -1991,6 +1992,7 @@ function delRec(i){
 
 
 function render(){
+  console.log('RENDER records count:', records.length);
   const y=viewDate.getFullYear();
   const m=String(viewDate.getMonth()+1).padStart(2,'0');
   const d=String(viewDate.getDate()).padStart(2,'0');
@@ -5062,7 +5064,19 @@ function switchCaseTab(name, el){
 // Nav
 const pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
 
+// Re-render whatever page is currently active
+function renderCurrentPage(){
+  if(currentPage==='patients'){ render(); }
+  else if(currentPage==='dashboard'){ renderDashboard(); }
+  else if(currentPage==='cases'){ ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);}); }
+  else if(currentPage==='patientreport'){ switchPtReport('ledger',document.getElementById('ptrep-ledger')); }
+  else if(currentPage==='incomereport'){ switchIncomeTab('expenses',document.getElementById('inc-expenses')); }
+  else if(currentPage==='pharmacy'){ renderPhIncome();renderPhPurchase();renderPhExpend(); }
+  else if(currentPage==='inventory'){ renderInvStockIn(); }
+}
+
 function goTo(page,el){
+  console.log('GOTO page:', page, '| records:', records.length, '| currentPage was:', currentPage);
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){n.classList.remove('active');});
   document.querySelectorAll('.page-content').forEach(function(p){p.style.display='none';});
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){
@@ -5148,36 +5162,15 @@ function initFirebase(){
     fbDatabase.ref('data').on('value',function(snapshot){
       var d=snapshot.val();
       applyFirebaseData(d);
+      console.log('AFTER FIREBASE records count:', records.length, '| caseRecords fixed:', (caseRecords.fixed||[]).length);
       fbOnline=true;
       showSyncStatus('Connected','#27ae60');
       updateBadges();
 
-      if(fbFirstLoad){
-        // First load — fully render current page
-        fbFirstLoad=false;
-        appFullyLoaded=true;
-        // Re-render all UI now that data is loaded
-        render();
-        renderDashboard();
-        ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-        // Re-render current page specifically
-        if(currentPage==='patients') render();
-        else if(currentPage==='dashboard') renderDashboard();
-        else if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-        else if(currentPage==='patientreport') switchPtReport('ledger',document.getElementById('ptrep-ledger'));
-        else if(currentPage==='incomereport') switchIncomeTab('expenses',document.getElementById('inc-expenses'));
-        updateBadges();
-      } else {
-        // Subsequent real-time updates — only update data silently
-        // Re-render only if on the affected page to avoid interrupting user
-        appFullyLoaded=true;
-        updateBadges();
-        if(currentPage==='patients') render();
-        if(currentPage==='dashboard') renderDashboard();
-        if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-        if(currentPage==='patientreport') switchPtReport('ledger',document.getElementById('ptrep-ledger'));
-        if(currentPage==='incomereport') switchIncomeTab('expenses',document.getElementById('inc-expenses'));
-      }
+      appFullyLoaded=true;
+      updateBadges();
+      // Always re-render the current page after data loads
+      renderCurrentPage();
       if(fbWritePending){fbWritePending=false;}
     },function(err){
       fbOnline=false;
@@ -5229,12 +5222,8 @@ function loadFromLocalStorage(){
   var ll=LS.get('lowStockAlerts');if(ll)lowStockAlerts=JSON.parse(ll);
   var lc=LS.get('caseRecords');if(lc)caseRecords=JSON.parse(lc);
   appFullyLoaded=true;
-  // Render all UI with local data
-  render();
-  renderDashboard();
-  ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
   updateBadges();
-  goTo(currentPage,null);
+  renderCurrentPage();
 }
 
 // ── Individual record Firebase operations ──
