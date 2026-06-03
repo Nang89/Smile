@@ -65,14 +65,15 @@ input, select, textarea{
   position:fixed;inset:0;
   background:rgba(0,0,0,0.45);
   z-index:200;
-  align-items:flex-end;
+  align-items:center;
   justify-content:center;
 }
 .form-modal-overlay.open{display:flex}
 .form-modal{
   background-color:#ffffff;
-  width:calc(100% - 2cm);
-  margin:0 1cm;
+  width:100%;
+  max-width:480px;
+  margin:0 16px;
   max-height:90vh;
   border-radius:20px 20px 0 0;
   overflow-y:auto;
@@ -392,7 +393,7 @@ input, select, textarea{
     </nav>
     <div style="margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px">
       <div id="sync-status" style="display:none;font-size:0.72rem;text-align:center;padding:4px 8px;border-radius:6px;background:#E5F5E0"></div>
-      <button onclick="openSyncSettings()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">☁ Sync with Sheet</button>
+      <button onclick="openSyncSettings()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">☁ Sync Settings</button>
       <button onclick="logout()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">⏻ Logout</button>
     </div>
   </aside>
@@ -1324,8 +1325,8 @@ input, select, textarea{
 </div>
 
 <!-- ══ CASES NEW ENTRY MODAL ══ -->
-<div id="case-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:flex-end;justify-content:center" onclick="closeCaseModal(event)">
-  <div style="background:#ffffff;width:calc(100% - 2cm);margin:0 1cm;max-height:92vh;border-radius:20px 20px 0 0;overflow-y:auto;display:flex;flex-direction:column;animation:slideUp 0.25s ease">
+<div id="case-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:center;justify-content:center" onclick="closeCaseModal(event)">
+  <div style="background:#ffffff;width:100%;max-width:480px;margin:0 16px;max-height:92vh;border-radius:16px;overflow-y:auto;display:flex;flex-direction:column;animation:slideUp 0.25s ease">
 
     <!-- Header -->
     <div style="background:#1f4e4a;padding:16px 20px;border-radius:20px 20px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
@@ -1596,14 +1597,8 @@ function doLogin(role){
   applyRoleAccess(role);
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
-  // Auto-pull on login then every 30s
-  setTimeout(function(){pullFromSheet();},1500);
-  setInterval(function(){
-    // Only auto-pull if no push is in progress or pending
-    if(!isPushing && !pushPending && !syncTimer){
-      pullFromSheet(true);
-    }
-  },30000);
+  // Connect to Firebase on login
+  setTimeout(function(){firebaseConnect();},500);
 }
 function logout(){
   currentRole=null;selectedRole=null;pinEntry='';
@@ -2311,19 +2306,13 @@ function renderIncomeYearly(){
     var yearRecs=records.filter(function(r){return r.date&&r.date.startsWith(yearStr);});
     var hasData=yearRecs.length>0;
     // also check case deposits
-    var caseDeposits=[];
-    ['fixed','removable','implant','ortho'].forEach(function(ct){
-      caseRecords[ct].forEach(function(r){
-        (r.depositLog||[]).forEach(function(d){if(d.date&&d.date.startsWith(yearStr))caseDeposits.push(d);});
-      });
-    });
-    if(!hasData&&!caseDeposits.length){t1e.style.display='block';}
+    if(!hasData){t1e.style.display='block';}
     else{
       t1e.style.display='none';var grandT=0;
       shortMonths.forEach(function(m,mi){
         var mStr=yearStr+'-'+String(mi+1).padStart(2,'0');
+        // records already includes case deposits — no double counting
         var dental=yearRecs.filter(function(r){return r.date&&r.date.startsWith(mStr);}).reduce(function(s,r){return s+Number(r.price||0);},0);
-        dental+=caseDeposits.filter(function(d){return d.date&&d.date.startsWith(mStr);}).reduce(function(s,d){return s+Number(d.amount||0);},0);
         var tr=document.createElement('tr');tr.style.backgroundColor=mi%2===0?'#fff':'#f5fbf7';
         tr.innerHTML='<td style="'+tdB+'">'+m+'</td><td style="'+tdR+'">'+(dental>0?'\u00a5'+dental.toLocaleString():'')+'</td>';
         t1b.appendChild(tr);grandT+=dental;
@@ -2598,7 +2587,7 @@ function openExpManageNames(type){
   const old=document.getElementById('exp-names-modal');if(old)old.remove();
   const overlay=document.createElement('div');
   overlay.id='exp-names-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
   var namesList=(expNames[type]||[]).map(function(n,i){
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eef6f0">'
@@ -2606,7 +2595,7 @@ function openExpManageNames(type){
       +'<button onclick="delExpName(\''+type+'\','+i+')" style="padding:2px 8px;border:none;border-radius:4px;background:#fde4e2;color:#c0392b;font-size:0.72rem;cursor:pointer">Del</button>'
       +'</div>';
   }).join('');
-  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:80vh;border-radius:20px 20px 0 0;overflow-y:auto">'
+  overlay.innerHTML='<div style="background:#fff;width:100%;max-width:480px;max-height:80vh;border-radius:16px;overflow-y:auto">'
     +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center">'
     +'<span style="color:#fff;font-size:0.82rem;font-weight:800;text-transform:uppercase">Manage '+(type==='salary'?'Salary':'Bills')+' Names</span>'
     +'<button onclick="document.getElementById(\'exp-names-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.85rem;font-weight:700">X</button>'
@@ -2674,16 +2663,9 @@ function renderNetIncome(){
   // Calculate per month
   function getDental(m){
     var mStr=yStr+'-'+String(m).padStart(2,'0');
-    var d=records.filter(function(r){return r.date&&r.date.startsWith(mStr);})
+    // records already includes case deposits — no need to add depositLog separately
+    return records.filter(function(r){return r.date&&r.date.startsWith(mStr);})
       .reduce(function(s,r){return s+Number(r.price||0);},0);
-    ['fixed','removable','implant','ortho'].forEach(function(ct){
-      caseRecords[ct].forEach(function(r){
-        (r.depositLog||[]).forEach(function(dep){
-          if(dep.date&&dep.date.startsWith(mStr)) d+=Number(dep.amount||0);
-        });
-      });
-    });
-    return d;
   }
   function getPharmacy(m){
     var mStr=yStr+'-'+String(m).padStart(2,'0');
@@ -2753,21 +2735,27 @@ function renderNetIncome(){
 updateNetYearLabel();
 
 function switchIncomeTab(tab, el){
-  ['expenses','monthly','yearly','netincome'].forEach(t=>{
-    const panel=document.getElementById('inc-panel-'+t);
-    if(t===tab){
-      panel.style.display=(t==='monthly'||t==='yearly'||t==='expenses'||t==='netincome')?'flex':'block';
-      if(t==='monthly') renderIncomeMonthly();
-      if(t==='yearly') renderIncomeYearly();
-      if(t==='expenses'){renderExpenses();updateExpLabels();}
-      if(t==='netincome'){renderNetIncome();updateNetYearLabel();}
-    } else {
-      panel.style.display='none';
-    }
-    const btn=document.getElementById('inc-'+t);
-    if(t===tab){btn.style.backgroundColor='#1f4e4a';btn.style.color='#fff';btn.style.border='none';}
-    else{btn.style.backgroundColor='#fff';btn.style.color='#1f4e4a';btn.style.border='2px solid #1f4e4a';}
+  if(!tab) return;
+  // First hide ALL panels and reset buttons
+  ['expenses','monthly','yearly','netincome'].forEach(function(t){
+    var panel=document.getElementById('inc-panel-'+t);
+    if(panel) panel.style.display='none';
+    var btn=document.getElementById('inc-'+t);
+    if(btn){btn.style.backgroundColor='#fff';btn.style.color='#1f4e4a';btn.style.border='2px solid #1f4e4a';}
   });
+  // Show active button
+  var activeBtn=document.getElementById('inc-'+tab);
+  if(activeBtn){activeBtn.style.backgroundColor='#1f4e4a';activeBtn.style.color='#fff';activeBtn.style.border='none';}
+  // Show active panel FIRST, then render content inside it
+  var activePanel=document.getElementById('inc-panel-'+tab);
+  if(activePanel){
+    activePanel.style.display='flex';
+    // Render after panel is visible
+    if(tab==='monthly'){renderIncomeMonthly();updateIncLabels();}
+    else if(tab==='yearly'){renderIncomeYearly();updateNetYearLabel();}
+    else if(tab==='expenses'){renderExpenses();updateExpLabels();}
+    else if(tab==='netincome'){renderNetIncome();updateNetYearLabel();}
+  }
 }
 
 function updateIncLabels(){
@@ -2817,15 +2805,9 @@ function renderIncomeMonthly(){
   if(t1body){
     t1body.innerHTML='';
     var byDate={};
+    // records already includes case deposits — no need to add depositLog separately
     records.filter(function(r){return r.date&&r.date.startsWith(monthStr1);}).forEach(function(r){
       if(!byDate[r.date])byDate[r.date]=0;byDate[r.date]+=Number(r.price||0);
-    });
-    ['fixed','removable','implant','ortho'].forEach(function(ct){
-      caseRecords[ct].forEach(function(r){
-        (r.depositLog||[]).forEach(function(d){
-          if(d.date&&d.date.startsWith(monthStr1)){if(!byDate[d.date])byDate[d.date]=0;byDate[d.date]+=Number(d.amount||0);}
-        });
-      });
     });
     var dates1=Object.keys(byDate).sort();
     if(dates1.length===0){t1empty.style.display='block';}
@@ -3060,9 +3042,9 @@ function openInvNewEntry(){
   const old=document.getElementById('inv-entry-modal');if(old)old.remove();
   const overlay=document.createElement('div');
   overlay.id='inv-entry-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:92vh;border-radius:20px 20px 0 0;display:flex;flex-direction:column">'
+  overlay.innerHTML='<div style="background:#fff;width:100%;max-width:480px;max-height:92vh;border-radius:16px;display:flex;flex-direction:column">'
     +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
     +'<span style="color:#fff;font-size:0.72rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase">New Stock Entry</span>'
     +'<button onclick="document.getElementById(\'inv-entry-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.85rem;font-weight:700">X</button>'
@@ -3738,6 +3720,10 @@ function switchPtReport(tab, el){
       btn.style.border='2px solid #1f4e4a';
     }
   });
+  // Always render the active tab when switching
+  if(tab==='ledger') renderLedger();
+  if(tab==='monthly') renderMonthlyReport();
+  if(tab==='yearly') renderYearlyReport();
 }
 
 // Pharmacy Income
@@ -4010,10 +3996,10 @@ function openPhPurModal(){
   const old=document.getElementById('ph-pur-modal');if(old)old.remove();
   const overlay=document.createElement('div');
   overlay.id='ph-pur-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
   overlay.innerHTML=`
-    <div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:90vh;border-radius:20px 20px 0 0;overflow-y:auto">
+    <div style="background:#fff;width:100%;max-width:480px;max-height:90vh;border-radius:16px;overflow-y:auto">
       <div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center">
         <span style="color:#fff;font-size:0.72rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase">New Purchase Entry</span>
         <button onclick="document.getElementById('ph-pur-modal').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.9rem;font-weight:700">X</button>
@@ -4194,9 +4180,9 @@ function openPhExpModal(){
   const old=document.getElementById('ph-exp-modal');if(old)old.remove();
   const overlay=document.createElement('div');
   overlay.id='ph-exp-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:90vh;border-radius:20px 20px 0 0;overflow-y:auto">'
+  overlay.innerHTML='<div style="background:#fff;width:100%;max-width:480px;max-height:90vh;border-radius:16px;overflow-y:auto">'
     +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center">'
     +'<span style="color:#fff;font-size:0.72rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase">New Expend Entry</span>'
     +'<button onclick="document.getElementById(\'ph-exp-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.9rem;font-weight:700">X</button>'
@@ -4291,9 +4277,9 @@ function openPhIncModal(){
   const old=document.getElementById('ph-inc-modal');if(old)old.remove();
   const overlay=document.createElement('div');
   overlay.id='ph-inc-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML='<div style="background:#fff;width:calc(100% - 2cm);margin:0 1cm;max-height:90vh;border-radius:20px 20px 0 0;overflow-y:auto">'
+  overlay.innerHTML='<div style="background:#fff;width:100%;max-width:480px;max-height:90vh;border-radius:16px;overflow-y:auto">'
     +'<div style="background:#1f4e4a;padding:14px 18px;border-radius:20px 20px 0 0;display:flex;justify-content:space-between;align-items:center">'
     +'<span style="color:#fff;font-size:0.72rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase">New Income Entry</span>'
     +'<button onclick="document.getElementById(\'ph-inc-modal\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.9rem;font-weight:700">X</button>'
@@ -5045,7 +5031,7 @@ function goTo(page,el){
   currentPage=page;
   var titleEl=document.getElementById('page-title');
   if(titleEl) titleEl.textContent=pageTitles[page]||page;
-  if(page==='dashboard') renderDashboard();
+  if(page==='dashboard') setTimeout(renderDashboard, 100);
   if(page==='patients'){render();}
   if(page==='cases'){
     // Use in-memory caseRecords (already up to date from pull/save)
@@ -5055,18 +5041,18 @@ function goTo(page,el){
     }
     ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
   }
-  if(page==='patientreport'){renderLedger();renderMonthlyReport();renderYearlyReport();}
-  if(page==='incomereport'){renderExpenses();updateExpLabels();renderIncomeMonthly();renderNetIncome();updateNetYearLabel();}
+  if(page==='patientreport'){
+    setTimeout(function(){switchPtReport('ledger', document.getElementById('ptrep-ledger'));}, 50);
+  }
+  if(page==='incomereport'){
+    setTimeout(function(){switchIncomeTab('expenses', document.getElementById('inc-expenses'));}, 50);
+  }
 }
-var SCRIPT_URL=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbxHNlEppWjIK1noC7ekTfQH-5A_oSRYMj68giAPaPgv4s_gNwQ1E3bmO-3Oak4klikZ5Q/exec';
-var syncTimer=null;        // debounce timer for push
-var isPushing=false;       // push in progress
-var isPulling=false;       // pull in progress
-var pushPending=false;     // a push was requested while pull was running
-var appFullyLoaded=false;  // true after first successful pull
-var lastPushTime=0;        // timestamp of last successful push
-var dataDirty=false;       // true if local data changed but not yet confirmed saved to sheet
 var currentPage='patients';
+var appFullyLoaded=false;
+var FB_URL='https://smiledental-82d66-default-rtdb.firebaseio.com'; // Firebase Realtime Database URL
+var FB_TOKEN=''; // optional auth token
+var fbListeners=[]; // active listeners to detach on logout
 
 function showSyncStatus(msg,color){
   var el=document.getElementById('sync-status');
@@ -5075,26 +5061,17 @@ function showSyncStatus(msg,color){
   if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
 }
 
-// Called after any data change — pushes immediately
+// Called after any data change — writes to Firebase immediately
 function autoSync(){
-  if(!SCRIPT_URL) return;
+  if(!FB_URL) return;
   if(!appFullyLoaded) return;
-  dataDirty=true;
-  clearTimeout(syncTimer);
-  syncTimer=null;
-  if(isPulling){
-    pushPending=true;
-  } else {
-    pushToSheet(true);
-  }
+  firebasePush();
 }
 
 function normalizeDate(s){
   if(!s) return '';
   s=String(s).trim();
-  // Already YYYY-MM-DD — return as-is, never parse
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // For any other format, parse and use LOCAL time methods
   var d=new Date(s);
   if(!isNaN(d.getTime())) return localDateStr(d);
   return s;
@@ -5112,283 +5089,217 @@ function fixRecordDates(arr){
   });
 }
 
-function pushToSheet(silent){
-  if(!SCRIPT_URL) return;
-  // Safety guard: never push before first pull completes (prevents wiping sheet on fresh load)
-  if(!appFullyLoaded){
-    showSyncStatus('Waiting for sync...','#e67e22');
-    return;
-  }
-  if(!silent) showSyncStatus('Syncing...','#e67e22');
+// ══════════════════════════════════════════════
+// FIREBASE REALTIME DATABASE SYNC
+// ══════════════════════════════════════════════
 
-  // Flatten caseRecords: [{category, date, name, treat, ...depositLog as JSON}]
-  var caseRecordsFlat=[];
-  ['fixed','removable','implant','ortho'].forEach(function(cat){
-    (caseRecords[cat]||[]).forEach(function(r){
-      var row={category:cat};
-      Object.keys(r).forEach(function(k){
-        if(k==='depositLog') row[k]=JSON.stringify(r[k]||[]);
-        else row[k]=r[k];
-      });
-      caseRecordsFlat.push(row);
-    });
+function fbUrl(path){
+  return FB_URL.replace(/\/$/,'')+'/'+path+'.json'+(FB_TOKEN?'?auth='+FB_TOKEN:'');
+}
+
+function firebaseConnect(){
+  FB_URL=LS.get('fbUrl')||'https://smiledental-82d66-default-rtdb.firebaseio.com';
+  FB_TOKEN=LS.get('fbToken')||'';
+  if(!FB_URL){ showSyncStatus('No Firebase URL','#e67e22'); return; }
+  showSyncStatus('Connecting...','#e67e22');
+  // Pull all data on connect
+  firebasePull(function(){
+    appFullyLoaded=true;
+    showSyncStatus('Connected','#27ae60');
+    // Start real-time listeners for each data node
+    startFirebaseListeners();
   });
+}
 
-  // Flatten expData: [{type, year, month, name, amount}]
-  var expDataFlat=[];
-  ['salary','bills'].forEach(function(type){
-    var typeData=(expData[type]||{});
-    Object.keys(typeData).forEach(function(year){
-      Object.keys(typeData[year]||{}).forEach(function(month){
-        var monthData=typeData[year][month]||{};
-        Object.keys(monthData).forEach(function(name){
-          if(monthData[name]!==''&&monthData[name]!==undefined){
-            expDataFlat.push({type:type,year:year,month:month,name:name,amount:monthData[name]});
-          }
-        });
-      });
-    });
-  });
+// Firebase stores arrays as objects {0:{},1:{}} — convert back to real arrays
+function fbArr(val){
+  if(!val) return [];
+  if(Array.isArray(val)) return val;
+  return Object.keys(val).sort(function(a,b){return Number(a)-Number(b);}).map(function(k){return val[k];});
+}
 
-  // Flatten expNames: [{type, name}]
-  var expNamesFlat=[];
-  Object.keys(expNames||{}).forEach(function(type){
-    (expNames[type]||[]).forEach(function(name){
-      expNamesFlat.push({type:type,name:name});
-    });
-  });
-
-  // Flatten invLedgerItems: [{category, item}]
-  var invLedgerItemsFlat=[];
-  ['dental','implant','general','lab'].forEach(function(cat){
-    (invLedgerItems[cat]||[]).forEach(function(item){
-      invLedgerItemsFlat.push({category:cat,item:item});
-    });
-  });
-
-  // Flatten invLedgerData: [{category, item, year, month, opening, balance}]
-  var invLedgerDataFlat=[];
-  ['dental','implant','general','lab'].forEach(function(cat){
-    Object.keys(invLedgerData[cat]||{}).forEach(function(item){
-      Object.keys(invLedgerData[cat][item]||{}).forEach(function(year){
-        Object.keys(invLedgerData[cat][item][year]||{}).forEach(function(month){
-          var md=invLedgerData[cat][item][year][month]||{};
-          invLedgerDataFlat.push({
-            category:cat,item:item,year:year,month:month,
-            opening:md.opening!==undefined?md.opening:'',
-            balance:md.balance!==undefined?md.balance:''
+function firebasePull(callback){
+  fetch(fbUrl('data'))
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(!d){ appFullyLoaded=true; if(callback)callback(); return; }
+    // Restore all data from Firebase
+    if(d.records){ records=fixRecordDates(fbArr(d.records)); LS.set('dental-records',JSON.stringify(records)); }
+    if(d.pharmacyIncome){ pharmacyIncome=fixRecordDates(fbArr(d.pharmacyIncome)); LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome)); }
+    if(d.pharmacyPurchase){ pharmacyPurchase=fixRecordDates(fbArr(d.pharmacyPurchase)); LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase)); }
+    if(d.pharmacyExpend){ pharmacyExpend=fixRecordDates(fbArr(d.pharmacyExpend)); LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend)); }
+    if(d.invStockIn){ invStockIn=fixRecordDates(fbArr(d.invStockIn)); LS.set('invStockIn',JSON.stringify(invStockIn)); }
+    if(d.lowStockAlerts){ lowStockAlerts=fbArr(d.lowStockAlerts); LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts)); }
+    if(d.expNames){ expNames=d.expNames; LS.set('expNames',JSON.stringify(expNames)); }
+    if(d.expData){ expData=d.expData; LS.set('expData',JSON.stringify(expData)); }
+    if(d.invLedgerItems){ invLedgerItems=d.invLedgerItems; LS.set('invLedgerItems',JSON.stringify(invLedgerItems)); }
+    if(d.invLedgerData){ invLedgerData=d.invLedgerData; LS.set('invLedgerData',JSON.stringify(invLedgerData)); }
+    if(d.caseRecords){
+      var cr={fixed:[],removable:[],implant:[],ortho:[]};
+      ['fixed','removable','implant','ortho'].forEach(function(cat){
+        if(d.caseRecords[cat]){
+          cr[cat]=fixRecordDates(fbArr(d.caseRecords[cat])).map(function(r){
+            r.done=(r.done===true||r.done==='true');
+            return r;
           });
-        });
+        }
       });
-    });
+      caseRecords=cr;
+      LS.set('caseRecords',JSON.stringify(caseRecords));
+    }
+    appFullyLoaded=true;
+    fbOnline=true;
+    updateBadges();
+    goTo(currentPage,null);
+    if(callback) callback();
+  })
+  .catch(function(err){
+    fbOnline=false;
+    showSyncStatus('Offline - using local data','#e67e22');
+    // Only load from localStorage on first connect failure, not on every poll failure
+    if(!appFullyLoaded){
+      var lr=LS.get('dental-records'); if(lr) records=fixRecordDates(JSON.parse(lr));
+      var lp=LS.get('pharmacyIncome'); if(lp) pharmacyIncome=fixRecordDates(JSON.parse(lp));
+      var lpp=LS.get('pharmacyPurchase'); if(lpp) pharmacyPurchase=fixRecordDates(JSON.parse(lpp));
+      var lpe=LS.get('pharmacyExpend'); if(lpe) pharmacyExpend=fixRecordDates(JSON.parse(lpe));
+      var li=LS.get('invStockIn'); if(li) invStockIn=fixRecordDates(JSON.parse(li));
+      var ll=LS.get('lowStockAlerts'); if(ll) lowStockAlerts=JSON.parse(ll);
+      var lc=LS.get('caseRecords'); if(lc) caseRecords=JSON.parse(lc);
+      appFullyLoaded=true;
+      updateBadges();
+      goTo(currentPage,null);
+    }
+    if(callback) callback();
   });
+}
 
+// Real-time polling every 10 seconds (Firebase REST doesn't support WebSocket without SDK)
+var fbPollTimer=null;
+var fbOnline=false; // true only when Firebase is reachable
+function startFirebaseListeners(){
+  clearInterval(fbPollTimer);
+  fbPollTimer=setInterval(function(){
+    if(appFullyLoaded && fbOnline) firebasePull();
+  },10000);
+}
+
+function firebasePush(){
+  if(!FB_URL) return;
   var payload={
-    action:'push',
     records:records,
     pharmacyIncome:pharmacyIncome,
     pharmacyPurchase:pharmacyPurchase,
     pharmacyExpend:pharmacyExpend,
     invStockIn:invStockIn,
     lowStockAlerts:lowStockAlerts,
-    caseRecordsFlat:caseRecordsFlat,
-    expDataFlat:expDataFlat,
-    expNamesFlat:expNamesFlat,
-    invLedgerItemsFlat:invLedgerItemsFlat,
-    invLedgerDataFlat:invLedgerDataFlat
+    expNames:expNames,
+    expData:expData,
+    invLedgerItems:invLedgerItems,
+    invLedgerData:invLedgerData,
+    caseRecords:caseRecords
   };
-
-  isPushing=true;
-  fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
-  .then(function(r){return r.json();})
-  .then(function(d){
-    isPushing=false;
-    if(d.status==='ok'||d.ok){
-      lastPushTime=Date.now();
-      dataDirty=false;
-      showSyncStatus('Synced','#27ae60');
-    } else {
-      showSyncStatus('Sync error','#c0392b');
-    }
+  showSyncStatus('Saving...','#e67e22');
+  fetch(fbUrl('data'),{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
   })
-  .catch(function(err){
-    isPushing=false;
+  .then(function(r){return r.json();})
+  .then(function(){
+    showSyncStatus('Saved','#27ae60');
+  })
+  .catch(function(){
     showSyncStatus('Offline - saved locally','#e67e22');
   });
 }
 
-function pullFromSheet(silent){
-  if(!SCRIPT_URL) return;
-  // Wait if push is in progress
-  if(isPushing){
-    setTimeout(function(){pullFromSheet(silent);},1500);
-    return;
-  }
-  // Block pull for 5 seconds after a push to let sheet update
-  if(Date.now()-lastPushTime < 5000){
-    setTimeout(function(){pullFromSheet(silent);},5000);
-    return;
-  }
-  isPulling=true;
-  showSyncStatus('Loading...','#e67e22');
-  fetch(SCRIPT_URL+'?action=pull')
-  .then(function(r){return r.json();})
-  .then(function(d){
-    if(d.status!=='ok'){showSyncStatus('Error','#c0392b');return;}
-
-    // Only update globals from sheet if no local changes are pending
-    if(dataDirty){
-      showSyncStatus('Up to date','#27ae60');
-      appFullyLoaded=true;
-      isPulling=false;
-      ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-      goTo(currentPage,null);
-      if(pushPending){pushPending=false;setTimeout(function(){pushToSheet(true);},500);}
-      return;
-    }
-
-    // Flat arrays
-    if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
-    if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=fixRecordDates(d.pharmacyIncome);LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
-    if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=fixRecordDates(d.pharmacyPurchase);LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
-    if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
-    if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
-    if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-
-    // Unflatten caseRecords
-    var crf=d.caseRecordsFlat;
-    if(crf && crf.length){
-      var cr={fixed:[],removable:[],implant:[],ortho:[]};
-      crf.forEach(function(row){
-        var cat=String(row.category||'').trim().toLowerCase();
-        if(!cat) return;
-        if(!cr[cat]) cr[cat]=[];
-        var rec={};
-        Object.keys(row).forEach(function(k){
-          if(k==='category') return;
-          if(k==='depositLog'){
-            try{
-              var dl=typeof row[k]==='string'?JSON.parse(row[k]):row[k];
-              rec[k]=(dl||[]).map(function(entry){
-                var e={};
-                Object.keys(entry).forEach(function(ek){
-                  e[ek]=(ek==='date')?normalizeDate(entry[ek]):entry[ek];
-                });
-                return e;
-              });
-            }catch(e){rec[k]=[];}
-          } else {
-            rec[k]=row[k];
-          }
-        });
-        rec=fixRecordDates([rec])[0];
-        // Convert string booleans back to real booleans
-        rec.done = (rec.done==='true'||rec.done===true);
-        cr[cat].push(rec);
-      });
-      caseRecords=cr;
-      LS.set('caseRecords',JSON.stringify(caseRecords));
-    }
-    // If pull returns no caseRecordsFlat, keep whatever is already in memory/localStorage
-
-    // Unflatten expNames
-    if(d.expNamesFlat&&d.expNamesFlat.length){
-      var en={salary:[],bills:[]};
-      d.expNamesFlat.forEach(function(row){
-        if(row.type&&row.name&&!en[row.type].includes(row.name)) en[row.type].push(row.name);
-      });
-      expNames=en;
-      LS.set('expNames',JSON.stringify(expNames));
-    }
-
-    // Unflatten expData
-    if(d.expDataFlat&&d.expDataFlat.length){
-      var ed={salary:{},bills:{}};
-      d.expDataFlat.forEach(function(row){
-        var type=row.type,year=row.year,month=row.month,name=row.name,amount=row.amount;
-        if(!ed[type]) ed[type]={};
-        if(!ed[type][year]) ed[type][year]={};
-        if(!ed[type][year][month]) ed[type][year][month]={};
-        ed[type][year][month][name]=amount;
-      });
-      expData=ed;
-      LS.set('expData',JSON.stringify(expData));
-    }
-
-    // Unflatten invLedgerItems
-    if(d.invLedgerItemsFlat&&d.invLedgerItemsFlat.length){
-      var ili={dental:[],implant:[],general:[],lab:[]};
-      d.invLedgerItemsFlat.forEach(function(row){
-        if(row.category&&row.item&&!ili[row.category].includes(row.item)) ili[row.category].push(row.item);
-      });
-      invLedgerItems=ili;
-      LS.set('invLedgerItems',JSON.stringify(invLedgerItems));
-    }
-
-    // Unflatten invLedgerData
-    if(d.invLedgerDataFlat&&d.invLedgerDataFlat.length){
-      var ild={dental:{},implant:{},general:{},lab:{}};
-      d.invLedgerDataFlat.forEach(function(row){
-        var cat=row.category,item=row.item,year=row.year,month=row.month;
-        if(!ild[cat]) ild[cat]={};
-        if(!ild[cat][item]) ild[cat][item]={};
-        if(!ild[cat][item][year]) ild[cat][item][year]={};
-        ild[cat][item][year][month]={opening:row.opening,balance:row.balance};
-      });
-      invLedgerData=ild;
-      LS.set('invLedgerData',JSON.stringify(invLedgerData));
-    }
-
-    showSyncStatus('Up to date','#27ae60');
-    appFullyLoaded=true;
-    isPulling=false;
-    // Force re-render case tables with fresh data
-    ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-    goTo(currentPage,null);
-    // If a push was requested while pull was running, push now
-    if(pushPending){
-      pushPending=false;
-      setTimeout(function(){pushToSheet(true);},500);
-    }
-  })
-  .catch(function(){
-    isPulling=false;
-    showSyncStatus('Offline','#e67e22');
-    // If a push was waiting for pull to finish, run it now
-    if(pushPending){
-      pushPending=false;
-      setTimeout(function(){pushToSheet(true);},500);
-    }
-  });
-}
-
+function closeModal(id){var el=document.getElementById(id);if(el)el.remove();}
 function openSyncSettings(){
   var old=document.getElementById('sync-modal');if(old)old.remove();
   var overlay=document.createElement('div');
   overlay.id='sync-modal';
   overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:400px">'
-    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">Sync Settings</h3>'
-    +'<div class="f-group" style="margin-bottom:8px"><label class="f-label">Apps Script URL</label>'
-    +'<input class="f-input" type="text" id="sync-url-input" placeholder="Paste your Web App URL" value="'+(SCRIPT_URL||'')+'"/></div>'
-    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:16px">Auto-syncs after every save. Saves locally when offline.</p>'
+  overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto">'
+    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">Firebase Sync Settings</h3>'
+    +'<div class="f-group" style="margin-bottom:12px"><label class="f-label">Firebase Database URL</label>'
+    +'<input class="f-input" type="text" id="fb-url-input" placeholder="https://your-app.firebaseio.com" value="'+(FB_URL||'')+'"/></div>'
+    +'<div class="f-group" style="margin-bottom:6px"><label class="f-label">Secret Token (optional)</label>'
+    +'<input class="f-input" type="text" id="fb-token-input" placeholder="Leave empty for test mode" value="'+(FB_TOKEN||'')+'"/></div>'
+    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:12px">Auto-saves after every change. Updates every 10 seconds from other devices.</p>'
     +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<button onclick="pushToSheet(false)" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Push Now</button>'
-    +'<button onclick="pullFromSheet()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Pull Now</button>'
+    +'<button onclick="firebasePush()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Push to Firebase</button>'
+    +'<button onclick="firebasePull()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Pull from Firebase</button>'
     +'</div>'
+    +'<hr style="border:none;border-top:1px solid #e0eeea;margin:12px 0"/>'
+    +'<h4 style="font-size:0.8rem;font-weight:700;color:#e67e22;margin-bottom:8px">Import from Google Sheets</h4>'
+    +'<div class="f-group" style="margin-bottom:8px"><label class="f-label">Google Apps Script URL</label>'
+    +'<input class="f-input" type="text" id="gas-url-input" value="'+(LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbxHNlEppWjIK1noC7ekTfQH-5A_oSRYMj68giAPaPgv4s_gNwQ1E3bmO-3Oak4klikZ5Q/exec')+'"/></div>'
+    +'<button onclick="importFromSheets()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#e67e22;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;margin-bottom:6px">Import from Google Sheets to Firebase</button>'
+    +'<p style="font-size:0.7rem;color:#aaa;margin-bottom:12px">Pulls all data from Google Sheets then saves to Firebase.</p>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end">'
-    +'<button onclick="document.getElementById(\'sync-modal\').remove()" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Cancel</button>'
-    +'<button onclick="saveSyncUrl()" style="padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:700">Save URL</button>'
+    +'<button onclick="closeModal(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Cancel</button>'
+    +'<button onclick="saveFbSettings()" style="padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:700">Save & Connect</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
 }
 
-function saveSyncUrl(){
-  var url=document.getElementById('sync-url-input').value.trim();
-  SCRIPT_URL=url;LS.set('scriptUrl',url);
+function importFromSheets(){
+  var gasUrl=document.getElementById('gas-url-input').value.trim();
+  if(!gasUrl){alert('Please enter your Google Apps Script URL');return;}
+  LS.set('scriptUrl',gasUrl);
+  closeModal('sync-modal');
+  showSyncStatus('Importing from Google Sheets...','#e67e22');
+  fetch(gasUrl+'?action=pull')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.status!=='ok'){showSyncStatus('Import failed','#c0392b');return;}
+    if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
+    if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=fixRecordDates(d.pharmacyIncome);LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
+    if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=fixRecordDates(d.pharmacyPurchase);LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
+    if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
+    if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
+    if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
+    if(d.caseRecordsFlat&&d.caseRecordsFlat.length){
+      var cr={fixed:[],removable:[],implant:[],ortho:[]};
+      d.caseRecordsFlat.forEach(function(row){
+        var cat=String(row.category||'').trim().toLowerCase();
+        if(!cat||!cr.hasOwnProperty(cat)) return;
+        var rec={};
+        Object.keys(row).forEach(function(k){
+          if(k==='category') return;
+          if(k==='depositLog'){try{rec[k]=JSON.parse(row[k]);}catch(e){rec[k]=[];}}
+          else rec[k]=row[k];
+        });
+        rec=fixRecordDates([rec])[0];
+        rec.done=(rec.done===true||rec.done==='true');
+        cr[cat].push(rec);
+      });
+      caseRecords=cr;
+      LS.set('caseRecords',JSON.stringify(caseRecords));
+    }
+    appFullyLoaded=true;
+    firebasePush();
+    ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+    goTo(currentPage,null);
+    showSyncStatus('Import complete! Saved to Firebase.','#27ae60');
+  })
+  .catch(function(){
+    showSyncStatus('Import failed - check your Apps Script URL','#c0392b');
+  });
+}
+
+function saveFbSettings(){
+  FB_URL=document.getElementById('fb-url-input').value.trim();
+  FB_TOKEN=document.getElementById('fb-token-input').value.trim();
+  LS.set('fbUrl',FB_URL);
+  LS.set('fbToken',FB_TOKEN);
   document.getElementById('sync-modal').remove();
-  showSyncStatus('URL saved','#27ae60');
+  firebaseConnect();
+}
+
+function saveSyncUrl(){
+  saveFbSettings();
 }
 
 </script>
