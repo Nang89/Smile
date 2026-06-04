@@ -2355,15 +2355,13 @@ function renderIncomeYearly(){
     t2h.innerHTML='';t2b.innerHTML='';
     // Get all years with data
     var allYears=[...new Set(records.map(function(r){return r.date?r.date.split('-')[0]:null;}).filter(Boolean))];
-    var caseRecs2=[];
-    ['fixed','removable','implant','ortho'].forEach(function(ct){
-      caseRecords[ct].forEach(function(r){
-        (r.depositLog||[]).forEach(function(d){if(d.date)caseRecs2.push({treat:r.treat,date:d.date,amount:Number(d.amount||0)});});
-      });
-    });
-    allYears=[...new Set([...allYears,...caseRecs2.map(function(r){return r.date.split('-')[0];})])].sort();
-    var prosTreats=[...new Set(caseRecs2.map(function(r){return r.treat;}).filter(Boolean))].sort();
-    var nonProsTreats=[...new Set(records.map(function(r){return r.cas;}).filter(Boolean))].sort();
+    // Prosthesis = records from case payments (fromCase:true)
+    var prosRecs=records.filter(function(r){return r.fromCase===true||r.fromCase==='true';});
+    // Non-Prosthesis = direct daily entries (no fromCase flag)
+    var nonProsRecords=records.filter(function(r){return !r.fromCase||r.fromCase===false||r.fromCase==='false';});
+    allYears=[...new Set(records.map(function(r){return r.date?r.date.split('-')[0]:null;}).filter(Boolean))].sort();
+    var prosTreats=[...new Set(prosRecs.map(function(r){return r.cas;}).filter(Boolean))].sort();
+    var nonProsTreats=[...new Set(nonProsRecords.map(function(r){return r.cas;}).filter(Boolean))].sort();
     if(!allYears.length||(!prosTreats.length&&!nonProsTreats.length)){t2e.style.display='block';}
     else{
       t2e.style.display='none';
@@ -2372,12 +2370,12 @@ function renderIncomeYearly(){
       headHtml+='<th style="'+thS+'">Total</th></tr>';
       t2h.innerHTML=headHtml;
       var prosColY=new Array(allYears.length).fill(0),nonProsColY=new Array(allYears.length).fill(0),prosG=0,nonProsG=0;
-      // Prosthesis rows
+      // Prosthesis rows — from case payments in daily records
       prosTreats.forEach(function(treat,ti){
         var tr=document.createElement('tr');tr.style.backgroundColor=ti%2===0?'#fff':'#f5fbf7';
         var html='<td style="'+tdB+'">'+treat+'</td>';var rt=0;
         allYears.forEach(function(y,yi){
-          var amt=caseRecs2.filter(function(r){return r.treat===treat&&r.date.startsWith(y);}).reduce(function(s,r){return s+r.amount;},0);
+          var amt=prosRecs.filter(function(r){return r.cas===treat&&r.date&&r.date.startsWith(y);}).reduce(function(s,r){return s+Number(r.price||0);},0);
           html+='<td style="'+tdR+'">'+(amt>0?'\u00a5'+amt.toLocaleString():'')+'</td>';rt+=amt;prosColY[yi]+=amt;
         });
         prosG+=rt;html+='<td style="'+tdR+'">'+(rt>0?'\u00a5'+rt.toLocaleString():'')+'</td>';
@@ -2387,20 +2385,20 @@ function renderIncomeYearly(){
       var pst=document.createElement('tr');
       pst.innerHTML='<td style="'+subS+'">Prosthesis Subtotal</td>'+prosColY.map(function(c){return '<td style="'+subS+';text-align:right">'+(c>0?'\u00a5'+c.toLocaleString():'')+'</td>';}).join('')+'<td style="'+subS+';text-align:right">\u00a5'+prosG.toLocaleString()+'</td>';
       t2b.appendChild(pst);
-      // Non-prosthesis rows
+      // Non-Prosthesis rows — exclude case payment records
       nonProsTreats.forEach(function(treat,ti){
         var tr=document.createElement('tr');tr.style.backgroundColor=ti%2===0?'#fff':'#f5fbf7';
         var html='<td style="'+tdB+'">'+treat+'</td>';var rt=0;
         allYears.forEach(function(y,yi){
-          var amt=records.filter(function(r){return r.cas===treat&&r.date&&r.date.startsWith(y);}).reduce(function(s,r){return s+Number(r.price||0);},0);
+          var amt=nonProsRecords.filter(function(r){return r.cas===treat&&r.date&&r.date.startsWith(y);}).reduce(function(s,r){return s+Number(r.price||0);},0);
           html+='<td style="'+tdR+'">'+(amt>0?'\u00a5'+amt.toLocaleString():'')+'</td>';rt+=amt;nonProsColY[yi]+=amt;
         });
         nonProsG+=rt;html+='<td style="'+tdR+'">'+(rt>0?'\u00a5'+rt.toLocaleString():'')+'</td>';
         tr.innerHTML=html;t2b.appendChild(tr);
       });
-      // Dental (non-prosthesis) subtotal
+      // Non-Prosthesis subtotal
       var npst=document.createElement('tr');
-      npst.innerHTML='<td style="'+subS+'">Dental Subtotal</td>'+nonProsColY.map(function(c){return '<td style="'+subS+';text-align:right">'+(c>0?'\u00a5'+c.toLocaleString():'')+'</td>';}).join('')+'<td style="'+subS+';text-align:right">\u00a5'+nonProsG.toLocaleString()+'</td>';
+      npst.innerHTML='<td style="'+subS+'">Non-Prosthesis Subtotal</td>'+nonProsColY.map(function(c){return '<td style="'+subS+';text-align:right">'+(c>0?'\u00a5'+c.toLocaleString():'')+'</td>';}).join('')+'<td style="'+subS+';text-align:right">\u00a5'+nonProsG.toLocaleString()+'</td>';
       t2b.appendChild(npst);
       // Grand total
       var gt=document.createElement('tr');gt.style.backgroundColor='#1f4e4a';
@@ -2493,6 +2491,7 @@ function renderExpenses(){
     thead.innerHTML=h;
     // Data
     var yStr=String(expYear);
+    if(!expData[type]) expData[type]={};
     if(!expData[type][yStr]) expData[type][yStr]={};
     var colTotals=new Array(12).fill(0);var grandTotal=0;
     names.forEach(function(name,ni){
@@ -2855,17 +2854,12 @@ function renderIncomeMonthly(){
   if(t2head&&t2body){
     t2head.innerHTML='';t2body.innerHTML='';
     var yearStr=String(t2Year);
+    // Prosthesis = case payments (fromCase:true), Non-Prosthesis = direct daily entries
     var allRecs=records.filter(function(r){return r.date&&r.date.startsWith(yearStr);});
-    var caseRecs=[];
-    ['fixed','removable','implant','ortho'].forEach(function(ct){
-      caseRecords[ct].forEach(function(r){
-        (r.depositLog||[]).forEach(function(d){
-          if(d.date&&d.date.startsWith(yearStr))caseRecs.push({treat:r.treat,date:d.date,amount:Number(d.amount||0)});
-        });
-      });
-    });
-    var prosTreats=[...new Set(caseRecs.map(function(r){return r.treat;}).filter(Boolean))].sort();
-    var nonProsTreats=[...new Set(allRecs.map(function(r){return r.cas;}).filter(Boolean))].sort();
+    var prosRecs2=allRecs.filter(function(r){return r.fromCase===true||r.fromCase==='true';});
+    var nonProsRecs2=allRecs.filter(function(r){return !r.fromCase||r.fromCase===false||r.fromCase==='false';});
+    var prosTreats=[...new Set(prosRecs2.map(function(r){return r.cas;}).filter(Boolean))].sort();
+    var nonProsTreats=[...new Set(nonProsRecs2.map(function(r){return r.cas;}).filter(Boolean))].sort();
     if(!prosTreats.length&&!nonProsTreats.length){t2empty.style.display='block';}
     else{
       t2empty.style.display='none';
@@ -2874,13 +2868,13 @@ function renderIncomeMonthly(){
       headHtml+='<th style="'+thS+'">Total</th></tr>';
       t2head.innerHTML=headHtml;
       var prosCol=new Array(12).fill(0),nonProsCol=new Array(12).fill(0),prosGrand=0,nonProsGrand=0;
-      // Prosthesis rows
+      // Prosthesis rows — from case payments
       prosTreats.forEach(function(treat,ti){
         var tr=document.createElement('tr');tr.style.backgroundColor=ti%2===0?'#fff':'#f5fbf7';
         var html='<td style="'+tdB+';padding-left:20px">'+treat+'</td>';var rt=0;
         for(var m=0;m<12;m++){
           var ms=yearStr+'-'+String(m+1).padStart(2,'0');
-          var amt=caseRecs.filter(function(r){return r.treat===treat&&r.date.startsWith(ms);}).reduce(function(s,r){return s+r.amount;},0);
+          var amt=prosRecs2.filter(function(r){return r.cas===treat&&r.date&&r.date.startsWith(ms);}).reduce(function(s,r){return s+Number(r.price||0);},0);
           html+='<td style="'+tdR+'">'+(amt>0?'\u00a5'+amt.toLocaleString():'')+'</td>';rt+=amt;prosCol[m]+=amt;
         }
         prosGrand+=rt;html+='<td style="'+tdR+';color:#1f4e4a">'+(rt>0?'\u00a5'+rt.toLocaleString():'')+'</td>';
@@ -2890,12 +2884,13 @@ function renderIncomeMonthly(){
       pst.innerHTML='<td style="'+subtotalStyle+'">Prosthesis Subtotal</td>'+prosCol.map(function(c){return '<td style="'+subtotalStyle+';text-align:right">'+(c>0?'\u00a5'+c.toLocaleString():'')+'</td>';}).join('')+'<td style="'+subtotalStyle+';text-align:right">¥'+prosGrand.toLocaleString()+'</td>';
       t2body.appendChild(pst);
       // Non-prosthesis rows
+      // Non-Prosthesis rows — direct daily entries only
       nonProsTreats.forEach(function(treat,ti){
         var tr=document.createElement('tr');tr.style.backgroundColor=ti%2===0?'#fff':'#f5fbf7';
         var html='<td style="'+tdB+';padding-left:20px">'+treat+'</td>';var rt=0;
         for(var m=0;m<12;m++){
           var ms=yearStr+'-'+String(m+1).padStart(2,'0');
-          var amt=allRecs.filter(function(r){return r.cas===treat&&r.date.startsWith(ms);}).reduce(function(s,r){return s+Number(r.price||0);},0);
+          var amt=nonProsRecs2.filter(function(r){return r.cas===treat&&r.date&&r.date.startsWith(ms);}).reduce(function(s,r){return s+Number(r.price||0);},0);
           html+='<td style="'+tdR+'">'+(amt>0?'\u00a5'+amt.toLocaleString():'')+'</td>';rt+=amt;nonProsCol[m]+=amt;
         }
         nonProsGrand+=rt;html+='<td style="'+tdR+';color:#1f4e4a">'+(rt>0?'\u00a5'+rt.toLocaleString():'')+'</td>';
@@ -4551,7 +4546,8 @@ function saveCaseEntry(){
       cas: rec.treat,
       price: initDeposit,
       doctor: rec.drname||'',
-      ptname: rec.name
+      ptname: rec.name,
+      fromCase: true
     });
     LS.set('dental-records', JSON.stringify(records));
   }
@@ -4930,6 +4926,7 @@ function addPaymentEntry(caseType,recIdx){
     price:amount,
     doctor:cr.drname||'',
     ptname:cr.name,
+    fromCase:true,
     _key:genId('rec'),
     createdAt:Date.now(),
     updatedAt:Date.now(),
@@ -5062,7 +5059,7 @@ function switchCaseTab(name, el){
 }
 
 // Nav
-const pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
+var pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
 
 // Re-render whatever page is currently active
 function renderCurrentPage(){
