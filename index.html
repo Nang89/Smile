@@ -394,7 +394,7 @@ input, select, textarea{
     <div style="margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px">
       <div id="sync-status" style="display:none;font-size:0.72rem;text-align:center;padding:4px 8px;border-radius:6px;background:#E5F5E0"></div>
       <div id="backup-status-bar" style="font-size:0.68rem;color:#7aaa9e;text-align:center;padding:2px 4px;min-height:16px;word-break:break-word"></div>
-      <button onclick="openSyncSettings()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">☁ Sync Settings</button>
+
       <button onclick="logout()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">⏻ Logout</button>
     </div>
   </aside>
@@ -5062,6 +5062,13 @@ function switchCaseTab(name, el){
 var pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
 
 // Re-render whatever page is currently active
+function showSyncStatus(msg,color){
+  var el=document.getElementById('sync-status');
+  if(!el)return;
+  el.textContent=msg;el.style.color=color||'#1f4e4a';el.style.display='block';
+  if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
+}
+
 function renderCurrentPage(){
   if(currentPage==='patients'){ render(); }
   else if(currentPage==='dashboard'){ renderDashboard(); }
@@ -5103,110 +5110,237 @@ function goTo(page,el){
   }
 }
 var currentPage='patients';
+var SB_URL='https://yknmurcvlbgmuyicqdji.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlrbm11cmN2bGJnbXV5aWNxZGppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MDMwMzUsImV4cCI6MjA5NjM3OTAzNX0.89ifGJF8fEq7NeaFJ-q91UJabQHP9Htz1xNvUCGLALY';
+var sbOnline=false;
 var appFullyLoaded=false;
-var FB_URL='https://smiledental-82d66-default-rtdb.firebaseio.com';
-var FB_TOKEN='';
-var fbDatabase=null;
-var fbOnline=false;
 var fbWritePending=false;
 
-// ── Helper: generate unique ID ──
+// ── Supabase helpers ──
+function sbHeaders(){
+  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'};
+}
+
+function sbFetch(table,method,body,params){
+  var url=SB_URL+'/rest/v1/'+table+(params?'?'+params:'');
+  var opts={method:method||'GET',headers:sbHeaders()};
+  if(body) opts.body=JSON.stringify(body);
+  return fetch(url,opts);
+}
+
 function genId(prefix){
   return (prefix||'id')+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
 }
 
-// ── Helper: convert Firebase object to array keeping _key ──
-function fbArr(val){
-  if(!val) return [];
-  if(Array.isArray(val)) return val;
-  return Object.keys(val).map(function(k){
-    var item=val[k];
-    if(typeof item==='object'&&item!==null) item._key=k;
-    return item;
+// ── Connect to Supabase ──
+function firebaseConnect(){
+  showSyncStatus('Connecting...','#e67e22');
+  // Load all data on connect
+  supabaseLoadAll(function(){
+    appFullyLoaded=true;
+    sbOnline=true;
+    showSyncStatus('Connected','#27ae60');
+    updateBadges();
+    renderCurrentPage();
+    // Start realtime subscription
+    startSupabaseRealtime();
   });
 }
 
-// ── Firebase SDK Real-time Sync ──
-function firebaseConnect(){
-  FB_URL=LS.get('fbUrl')||'https://smiledental-82d66-default-rtdb.firebaseio.com';
-  FB_TOKEN=LS.get('fbToken')||'';
-  if(!FB_URL){showSyncStatus('No Firebase URL','#e67e22');return;}
-  showSyncStatus('Connecting...','#e67e22');
-  if(!window.firebase){
-    var s=document.createElement('script');
-    s.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
-    s.onload=function(){
-      var s2=document.createElement('script');
-      s2.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js';
-      s2.onload=function(){initFirebase();};
-      document.head.appendChild(s2);
-    };
-    document.head.appendChild(s);
-  } else {
-    initFirebase();
-  }
+function supabaseLoadAll(callback){
+  var loaded=0;
+  var total=7;
+  function done(){ loaded++; if(loaded>=total && callback) callback(); }
+
+  // Load records
+  sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      records=fixRecordDates(d.map(function(r){
+        return {date:r.date,on:r.on_,cas:r.cas,price:r.price,doctor:r.doctor,
+                ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
+                createdAt:r.createdat,updatedAt:r.updatedat};
+      }));
+      LS.set('dental-records',JSON.stringify(records));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load case records
+  sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      var cr={fixed:[],removable:[],implant:[],ortho:[]};
+      d.forEach(function(r){
+        var cat=r.category;
+        if(!cr[cat]) return;
+        var rec={
+          date:r.date,treat:r.treat,name:r.name,age:r.age,sex:r.sex,
+          newold:r.newold,address:r.address,phone:r.phone,drname:r.drname,
+          total:r.total,drnote:r.drnote,done:r.done,_key:r.id,
+          createdAt:r.createdat,updatedAt:r.updatedat,
+          depositLog:[]
+        };
+        try{rec.depositLog=JSON.parse(r.depositlog||'[]');}catch(e){rec.depositLog=[];}
+        cr[cat].push(rec);
+      });
+      caseRecords=cr;
+      LS.set('caseRecords',JSON.stringify(caseRecords));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load pharmacy income
+  sbFetch('pharmacy_income','GET',null,'deleted=eq.false&order=updatedat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      pharmacyIncome=fixRecordDates(d.map(function(r){
+        return {date:r.date,retail:r.retail,wholesale:r.wholesale,_key:r.id};
+      }));
+      LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load pharmacy purchase
+  sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&order=updatedat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      pharmacyPurchase=fixRecordDates(d.map(function(r){
+        return {date:r.date,supplier:r.supplier,amount:r.amount,unit:r.unit,
+                status:r.status,remark:r.remark,_key:r.id};
+      }));
+      LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load pharmacy expend
+  sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&order=updatedat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      pharmacyExpend=fixRecordDates(d.map(function(r){
+        return {date:r.date,items:r.items,amount:r.amount,unit:r.unit,_key:r.id};
+      }));
+      LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load inventory
+  sbFetch('inv_stock_in','GET',null,'deleted=eq.false&order=updatedat.asc')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      invStockIn=fixRecordDates(d.map(function(r){
+        return {date:r.date,supplier:r.supplier,items:r.items,qty:r.qty,
+                price:r.price,category:r.category,_key:r.id};
+      }));
+      LS.set('invStockIn',JSON.stringify(invStockIn));
+    }
+    done();
+  }).catch(function(){done();});
+
+  // Load settings
+  sbFetch('settings','GET',null,null)
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)){
+      d.forEach(function(row){
+        try{
+          var val=JSON.parse(row.value);
+          if(row.key==='expNames') expNames=val;
+          if(row.key==='expData') expData=val;
+          if(row.key==='invLedgerItems') invLedgerItems=val;
+          if(row.key==='invLedgerData') invLedgerData=val;
+          if(row.key==='lowStockAlerts') lowStockAlerts=val;
+        }catch(e){}
+      });
+    }
+    done();
+  }).catch(function(){done();});
 }
 
-function initFirebase(){
+// ── Realtime subscriptions ──
+function startSupabaseRealtime(){
+  // Use Supabase realtime via websocket
+  var wsUrl=SB_URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+SB_KEY+'&vsn=1.0.0';
   try{
-    var projectId=FB_URL.replace('https://','').replace('-default-rtdb.firebaseio.com','').replace('.firebaseio.com','');
-    var cfg={apiKey:'AIzaSyPlaceholder',authDomain:projectId+'.firebaseapp.com',databaseURL:FB_URL,projectId:projectId};
-    if(!firebase.apps.length) firebase.initializeApp(cfg);
-    fbDatabase=firebase.database();
-
-    var fbFirstLoad=true;
-    // Listen to entire data node in real-time
-    fbDatabase.ref('data').on('value',function(snapshot){
-      var d=snapshot.val();
-      applyFirebaseData(d);
-      console.log('AFTER FIREBASE records count:', records.length, '| caseRecords fixed:', (caseRecords.fixed||[]).length);
-      fbOnline=true;
-      showSyncStatus('Connected','#27ae60');
-      updateBadges();
-
-      appFullyLoaded=true;
-      updateBadges();
-      // Always re-render the current page after data loads
-      renderCurrentPage();
-      if(fbWritePending){fbWritePending=false;}
-    },function(err){
-      fbOnline=false;
-      showSyncStatus('Offline - using local data','#e67e22');
-      loadFromLocalStorage();
-    });
-  }catch(e){
-    fbOnline=false;
-    showSyncStatus('Offline - using local data','#e67e22');
-    loadFromLocalStorage();
-  }
+    var ws=new WebSocket(wsUrl);
+    ws.onopen=function(){
+      // Subscribe to all table changes
+      var msg={topic:'realtime:public',event:'phx_join',payload:{config:{broadcast:{self:true},presence:{key:''},postgres_changes:[
+        {event:'*',schema:'public',table:'records'},
+        {event:'*',schema:'public',table:'case_records'},
+        {event:'*',schema:'public',table:'pharmacy_income'},
+        {event:'*',schema:'public',table:'pharmacy_purchase'},
+        {event:'*',schema:'public',table:'pharmacy_expend'},
+        {event:'*',schema:'public',table:'inv_stock_in'}
+      ]}},ref:'1'};
+      ws.send(JSON.stringify(msg));
+      // Keep alive
+      setInterval(function(){
+        if(ws.readyState===1) ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
+      },30000);
+    };
+    ws.onmessage=function(e){
+      try{
+        var msg=JSON.parse(e.data);
+        if(msg.event==='postgres_changes'&&msg.payload&&msg.payload.data){
+          // Data changed on another device - reload that table
+          var tbl=msg.payload.data.table;
+          supabaseReloadTable(tbl);
+        }
+      }catch(ex){}
+    };
+    ws.onerror=function(){showSyncStatus('Realtime error','#e67e22');};
+  }catch(e){}
 }
 
-function applyFirebaseData(d){
-  if(!d) return;
-  if(d.records){
-    records=fixRecordDates(fbArr(d.records).filter(function(r){return !r.deleted;}));
-    LS.set('dental-records',JSON.stringify(records));
-  }
-  if(d.pharmacyIncome){pharmacyIncome=fixRecordDates(fbArr(d.pharmacyIncome).filter(function(r){return !r.deleted;}));LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
-  if(d.pharmacyPurchase){pharmacyPurchase=fixRecordDates(fbArr(d.pharmacyPurchase).filter(function(r){return !r.deleted;}));LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
-  if(d.pharmacyExpend){pharmacyExpend=fixRecordDates(fbArr(d.pharmacyExpend).filter(function(r){return !r.deleted;}));LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
-  if(d.invStockIn){invStockIn=fixRecordDates(fbArr(d.invStockIn).filter(function(r){return !r.deleted;}));LS.set('invStockIn',JSON.stringify(invStockIn));}
-  if(d.lowStockAlerts){lowStockAlerts=fbArr(d.lowStockAlerts);LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-  if(d.expNames){expNames=d.expNames;LS.set('expNames',JSON.stringify(expNames));}
-  if(d.expData){expData=d.expData;LS.set('expData',JSON.stringify(expData));}
-  if(d.invLedgerItems){invLedgerItems=d.invLedgerItems;LS.set('invLedgerItems',JSON.stringify(invLedgerItems));}
-  if(d.invLedgerData){invLedgerData=d.invLedgerData;LS.set('invLedgerData',JSON.stringify(invLedgerData));}
-  if(d.caseRecords){
-    var cr={fixed:[],removable:[],implant:[],ortho:[]};
-    ['fixed','removable','implant','ortho'].forEach(function(cat){
-      if(d.caseRecords[cat]){
-        cr[cat]=fixRecordDates(fbArr(d.caseRecords[cat]).filter(function(r){return !r.deleted;})).map(function(r){
-          r.done=(r.done===true||r.done==='true'); return r;
-        });
+function supabaseReloadTable(tbl){
+  if(tbl==='records'){
+    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(Array.isArray(d)){
+        records=fixRecordDates(d.map(function(r){
+          return {date:r.date,on:r.on_,cas:r.cas,price:r.price,doctor:r.doctor,
+                  ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
+                  createdAt:r.createdat,updatedAt:r.updatedat};
+        }));
+        LS.set('dental-records',JSON.stringify(records));
+        updateBadges();
+        if(currentPage==='patients') render();
+        if(currentPage==='dashboard') renderDashboard();
       }
     });
-    caseRecords=cr;
-    LS.set('caseRecords',JSON.stringify(caseRecords));
+  }
+  if(tbl==='case_records'){
+    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(Array.isArray(d)){
+        var cr={fixed:[],removable:[],implant:[],ortho:[]};
+        d.forEach(function(r){
+          var cat=r.category;
+          if(!cr[cat]) return;
+          var rec={date:r.date,treat:r.treat,name:r.name,age:r.age,sex:r.sex,
+                    newold:r.newold,address:r.address,phone:r.phone,drname:r.drname,
+                    total:r.total,drnote:r.drnote,done:r.done,_key:r.id,
+                    createdAt:r.createdat,updatedAt:r.updatedat,depositLog:[]};
+          try{rec.depositLog=JSON.parse(r.depositlog||'[]');}catch(e){rec.depositLog=[];}
+          cr[cat].push(rec);
+        });
+        caseRecords=cr;
+        LS.set('caseRecords',JSON.stringify(caseRecords));
+        if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+      }
+    });
   }
 }
 
@@ -5223,138 +5357,157 @@ function loadFromLocalStorage(){
   renderCurrentPage();
 }
 
-// ── Individual record Firebase operations ──
-
+// ── Individual record save/delete operations ──
 function fbSaveRecord(rec){
-  // Ensure record has an ID
   if(!rec._key) rec._key=genId('rec');
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
-  rec.deleted=false;
-  if(fbDatabase&&fbOnline){
-    fbDatabase.ref('data/records/'+rec._key).set(rec);
-  }
+  var row={id:rec._key,date:rec.date,on_:rec.on,cas:rec.cas,price:rec.price,
+            doctor:rec.doctor,ptname:rec.ptname,fromcase:rec.fromCase||false,
+            createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('records','POST',[row],'on_conflict=id')
+  .then(function(){showSyncStatus('Saved','#27ae60');})
+  .catch(function(){showSyncStatus('Saved locally','#e67e22');});
   return rec;
 }
 
 function fbDeleteRecord(rec){
-  // Soft delete
-  if(fbDatabase&&fbOnline&&rec._key){
-    fbDatabase.ref('data/records/'+rec._key+'/deleted').set(true);
-    fbDatabase.ref('data/records/'+rec._key+'/updatedAt').set(Date.now());
-  }
+  if(!rec._key) return;
+  sbFetch('records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
+  .catch(function(){});
 }
 
-function fbSaveCaseRecord(caseType, rec){
+function fbSaveCaseRecord(caseType,rec){
   if(!rec._key) rec._key=genId('case');
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
-  rec.deleted=false;
-  if(fbDatabase&&fbOnline){
-    fbDatabase.ref('data/caseRecords/'+caseType+'/'+rec._key).set(rec);
-  }
+  var row={id:rec._key,category:caseType,date:rec.date,treat:rec.treat,name:rec.name,
+            age:rec.age,sex:rec.sex,newold:rec.newold,address:rec.address,phone:rec.phone,
+            drname:rec.drname,total:rec.total,drnote:rec.drnote,
+            depositlog:JSON.stringify(rec.depositLog||[]),
+            done:rec.done||false,createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('case_records','POST',[row],'on_conflict=id')
+  .then(function(){showSyncStatus('Saved','#27ae60');})
+  .catch(function(){showSyncStatus('Saved locally','#e67e22');});
   return rec;
 }
 
-function fbDeleteCaseRecord(caseType, rec){
-  if(fbDatabase&&fbOnline&&rec._key){
-    fbDatabase.ref('data/caseRecords/'+caseType+'/'+rec._key+'/deleted').set(true);
-    fbDatabase.ref('data/caseRecords/'+caseType+'/'+rec._key+'/updatedAt').set(Date.now());
-  }
+function fbDeleteCaseRecord(caseType,rec){
+  if(!rec._key) return;
+  sbFetch('case_records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
+  .catch(function(){});
 }
 
 function fbSavePharmacyIncome(rec){
   if(!rec._key) rec._key=genId('phi');
-  rec.updatedAt=Date.now(); rec.deleted=false;
-  if(fbDatabase&&fbOnline) fbDatabase.ref('data/pharmacyIncome/'+rec._key).set(rec);
+  rec.updatedAt=Date.now();
+  var row={id:rec._key,date:rec.date,retail:rec.retail,wholesale:rec.wholesale,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('pharmacy_income','POST',[row],'on_conflict=id').catch(function(){});
   return rec;
 }
 function fbDeletePharmacyIncome(rec){
-  if(fbDatabase&&fbOnline&&rec._key) fbDatabase.ref('data/pharmacyIncome/'+rec._key+'/deleted').set(true);
+  if(!rec._key) return;
+  sbFetch('pharmacy_income','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
 }
+
 function fbSavePharmacyPurchase(rec){
   if(!rec._key) rec._key=genId('php');
-  rec.updatedAt=Date.now(); rec.deleted=false;
-  if(fbDatabase&&fbOnline) fbDatabase.ref('data/pharmacyPurchase/'+rec._key).set(rec);
+  rec.updatedAt=Date.now();
+  var row={id:rec._key,date:rec.date,supplier:rec.supplier,amount:rec.amount,unit:rec.unit,status:rec.status,remark:rec.remark,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('pharmacy_purchase','POST',[row],'on_conflict=id').catch(function(){});
   return rec;
 }
 function fbDeletePharmacyPurchase(rec){
-  if(fbDatabase&&fbOnline&&rec._key) fbDatabase.ref('data/pharmacyPurchase/'+rec._key+'/deleted').set(true);
+  if(!rec._key) return;
+  sbFetch('pharmacy_purchase','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
 }
+
 function fbSavePharmacyExpend(rec){
   if(!rec._key) rec._key=genId('phe');
-  rec.updatedAt=Date.now(); rec.deleted=false;
-  if(fbDatabase&&fbOnline) fbDatabase.ref('data/pharmacyExpend/'+rec._key).set(rec);
+  rec.updatedAt=Date.now();
+  var row={id:rec._key,date:rec.date,items:rec.items,amount:rec.amount,unit:rec.unit,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('pharmacy_expend','POST',[row],'on_conflict=id').catch(function(){});
   return rec;
 }
 function fbDeletePharmacyExpend(rec){
-  if(fbDatabase&&fbOnline&&rec._key) fbDatabase.ref('data/pharmacyExpend/'+rec._key+'/deleted').set(true);
+  if(!rec._key) return;
+  sbFetch('pharmacy_expend','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
 }
+
 function fbSaveInvStockIn(rec){
   if(!rec._key) rec._key=genId('inv');
-  rec.updatedAt=Date.now(); rec.deleted=false;
-  if(fbDatabase&&fbOnline) fbDatabase.ref('data/invStockIn/'+rec._key).set(rec);
+  rec.updatedAt=Date.now();
+  var row={id:rec._key,date:rec.date,supplier:rec.supplier,items:rec.items,qty:rec.qty,price:rec.price,category:rec.category,updatedat:rec.updatedAt,deleted:false};
+  sbFetch('inv_stock_in','POST',[row],'on_conflict=id').catch(function(){});
   return rec;
 }
 function fbDeleteInvStockIn(rec){
-  if(fbDatabase&&fbOnline&&rec._key) fbDatabase.ref('data/invStockIn/'+rec._key+'/deleted').set(true);
+  if(!rec._key) return;
+  sbFetch('inv_stock_in','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
 }
 
-// autoSync now saves settings/config data (expNames, expData, etc.)
 function autoSync(){
   if(!appFullyLoaded) return;
-  if(!fbDatabase||!fbOnline){
-    showSyncStatus('Saved locally','#e67e22');
-    fbWritePending=true;
-    return;
-  }
-  // Save non-record data (settings, expense names, ledger)
-  var settings={
-    expNames:expNames,
-    expData:expData,
-    invLedgerItems:invLedgerItems,
-    invLedgerData:invLedgerData,
-    lowStockAlerts:lowStockAlerts
-  };
-  fbDatabase.ref('data/settings').set(settings)
+  // Save settings to Supabase
+  var settings=[
+    {key:'expNames',value:JSON.stringify(expNames)},
+    {key:'expData',value:JSON.stringify(expData)},
+    {key:'invLedgerItems',value:JSON.stringify(invLedgerItems)},
+    {key:'invLedgerData',value:JSON.stringify(invLedgerData)},
+    {key:'lowStockAlerts',value:JSON.stringify(lowStockAlerts)}
+  ];
+  sbFetch('settings','POST',settings,'on_conflict=key')
   .then(function(){showSyncStatus('Saved','#27ae60');})
   .catch(function(){showSyncStatus('Saved locally','#e67e22');});
 }
 
-// Keep for Sync Settings manual buttons
 function firebasePush(){
-  if(!fbDatabase||!fbOnline){showSyncStatus('Not connected','#e67e22');return;}
+  if(!sbOnline){showSyncStatus('Not connected','#e67e22');return;}
   showSyncStatus('Pushing all data...','#e67e22');
-  // Push all records with IDs
-  var payload={settings:{expNames:expNames,expData:expData,invLedgerItems:invLedgerItems,invLedgerData:invLedgerData,lowStockAlerts:lowStockAlerts}};
-  // Convert arrays to keyed objects
-  payload.records={};
-  records.forEach(function(r){if(!r._key)r._key=genId('rec');payload.records[r._key]=r;});
-  payload.pharmacyIncome={};
-  pharmacyIncome.forEach(function(r){if(!r._key)r._key=genId('phi');payload.pharmacyIncome[r._key]=r;});
-  payload.pharmacyPurchase={};
-  pharmacyPurchase.forEach(function(r){if(!r._key)r._key=genId('php');payload.pharmacyPurchase[r._key]=r;});
-  payload.pharmacyExpend={};
-  pharmacyExpend.forEach(function(r){if(!r._key)r._key=genId('phe');payload.pharmacyExpend[r._key]=r;});
-  payload.invStockIn={};
-  invStockIn.forEach(function(r){if(!r._key)r._key=genId('inv');payload.invStockIn[r._key]=r;});
-  payload.caseRecords={};
-  ['fixed','removable','implant','ortho'].forEach(function(cat){
-    payload.caseRecords[cat]={};
-    (caseRecords[cat]||[]).forEach(function(r){if(!r._key)r._key=genId('case');payload.caseRecords[cat][r._key]=r;});
+  // Push all records
+  var recs=records.map(function(r){
+    return {id:r._key||genId('rec'),date:r.date,on_:r.on,cas:r.cas,price:r.price,
+             doctor:r.doctor,ptname:r.ptname,fromcase:r.fromCase||false,
+             createdat:r.createdAt||Date.now(),updatedat:Date.now(),deleted:false};
   });
-  fbDatabase.ref('data').update(payload)
-  .then(function(){showSyncStatus('All data pushed','#27ae60');})
-  .catch(function(){showSyncStatus('Push failed','#c0392b');});
+  if(recs.length) sbFetch('records','POST',recs,'on_conflict=id');
+
+  // Push case records
+  var caseRecs=[];
+  ['fixed','removable','implant','ortho'].forEach(function(cat){
+    (caseRecords[cat]||[]).forEach(function(r){
+      caseRecs.push({id:r._key||genId('case'),category:cat,date:r.date,treat:r.treat,
+        name:r.name,age:r.age,sex:r.sex,newold:r.newold,address:r.address,phone:r.phone,
+        drname:r.drname,total:r.total,drnote:r.drnote,
+        depositlog:JSON.stringify(r.depositLog||[]),done:r.done||false,
+        createdat:r.createdAt||Date.now(),updatedat:Date.now(),deleted:false});
+    });
+  });
+  if(caseRecs.length) sbFetch('case_records','POST',caseRecs,'on_conflict=id');
+
+  // Push pharmacy and inventory
+  var phiRecs=pharmacyIncome.map(function(r){return {id:r._key||genId('phi'),date:r.date,retail:r.retail,wholesale:r.wholesale,updatedat:Date.now(),deleted:false};}); 
+  if(phiRecs.length) sbFetch('pharmacy_income','POST',phiRecs,'on_conflict=id');
+
+  var phpRecs=pharmacyPurchase.map(function(r){return {id:r._key||genId('php'),date:r.date,supplier:r.supplier,amount:r.amount,unit:r.unit,status:r.status,remark:r.remark,updatedat:Date.now(),deleted:false};}); 
+  if(phpRecs.length) sbFetch('pharmacy_purchase','POST',phpRecs,'on_conflict=id');
+
+  var pheRecs=pharmacyExpend.map(function(r){return {id:r._key||genId('phe'),date:r.date,items:r.items,amount:r.amount,unit:r.unit,updatedat:Date.now(),deleted:false};}); 
+  if(pheRecs.length) sbFetch('pharmacy_expend','POST',pheRecs,'on_conflict=id');
+
+  var invRecs=invStockIn.map(function(r){return {id:r._key||genId('inv'),date:r.date,supplier:r.supplier,items:r.items,qty:r.qty,price:r.price,category:r.category,updatedat:Date.now(),deleted:false};}); 
+  if(invRecs.length) sbFetch('inv_stock_in','POST',invRecs,'on_conflict=id');
+
+  autoSync();
+  setTimeout(function(){showSyncStatus('All data pushed to Supabase','#27ae60');},2000);
 }
 
 function firebasePull(){
-  if(!fbDatabase){showSyncStatus('Not connected','#e67e22');return;}
-  fbDatabase.ref('data').once('value').then(function(snapshot){
-    var d=snapshot.val();
-    if(d){applyFirebaseData(d);}
-    updateBadges();goTo(currentPage,null);
-    showSyncStatus('Pulled','#27ae60');
+  showSyncStatus('Loading...','#e67e22');
+  supabaseLoadAll(function(){
+    updateBadges();
+    renderCurrentPage();
+    showSyncStatus('Pulled from Supabase','#27ae60');
   });
 }
 
@@ -5365,128 +5518,88 @@ function openSyncSettings(){
   overlay.id='sync-modal';
   overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+  var lastBk=LS.get('lastBackup');
   overlay.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto">'
-    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:16px">Firebase Sync Settings</h3>'
-    +'<div class="f-group" style="margin-bottom:12px"><label class="f-label">Firebase Database URL</label>'
-    +'<input class="f-input" type="text" id="fb-url-input" placeholder="https://your-app.firebaseio.com" value="'+(FB_URL||'')+'"/></div>'
-    +'<div class="f-group" style="margin-bottom:6px"><label class="f-label">Secret Token (optional)</label>'
-    +'<input class="f-input" type="text" id="fb-token-input" placeholder="Leave empty for test mode" value="'+(FB_TOKEN||'')+'"/></div>'
-    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:12px">Auto-saves after every change. Updates every 10 seconds from other devices.</p>'
-    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<button onclick="firebasePush()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Push to Firebase</button>'
-    +'<button onclick="firebasePull()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700">Pull from Firebase</button>'
-    +'</div>'
-    +'<hr style="border:none;border-top:1px solid #e0eeea;margin:12px 0"/>'
-    +'<h4 style="font-size:0.8rem;font-weight:700;color:#e67e22;margin-bottom:8px">Import from Google Sheets</h4>'
-    +'<div class="f-group" style="margin-bottom:8px"><label class="f-label">Google Apps Script URL</label>'
-    +'<input class="f-input" type="text" id="gas-url-input" value="'+(LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbxHNlEppWjIK1noC7ekTfQH-5A_oSRYMj68giAPaPgv4s_gNwQ1E3bmO-3Oak4klikZ5Q/exec')+'"/></div>'
-    +'<button onclick="importFromSheets()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#e67e22;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;margin-bottom:6px">Import from Google Sheets to Firebase</button>'
-    +'<p style="font-size:0.7rem;color:#aaa;margin-bottom:12px">Pulls all data from Google Sheets then saves to Firebase.</p>'
-    +'<hr style="border:none;border-top:1px solid #e0eeea;margin:12px 0"/>'
+    +'<h3 style="font-size:0.9rem;font-weight:700;color:#1f4e4a;margin-bottom:4px">☁ Supabase Sync</h3>'
+    +'<p style="font-size:0.72rem;color:#7aaa9e;margin-bottom:12px">Auto-saves after every change. Real-time updates across all devices. No manual sync needed.</p>'
+    +'<hr style="border:none;border-top:1px solid #e0eeea;margin:0 0 12px"/>'
     +'<h4 style="font-size:0.8rem;font-weight:700;color:#27ae60;margin-bottom:8px">💾 Backup to Google Sheets</h4>'
     +'<button onclick="backupToSheets(false)" style="width:100%;padding:10px;border:none;border-radius:8px;background:#27ae60;color:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;margin-bottom:6px">Backup Now to Google Sheets</button>'
-    +'<p id="last-backup-label" style="font-size:0.7rem;color:#aaa;margin-bottom:4px">'+(LS.get('lastBackup')?'Last backup: '+LS.get('lastBackup'):'No backup yet')+'</p>'
-    +'<p style="font-size:0.7rem;color:#aaa;margin-bottom:12px">Auto backup runs daily at 11PM silently.</p>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
-    +'<button onclick="closeModal(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Cancel</button>'
-    +'<button onclick="saveFbSettings()" style="padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:700">Save & Connect</button>'
+    +'<p id="last-backup-label" style="font-size:0.7rem;margin-bottom:4px">'+(lastBk?'✅ Last backup: '+lastBk:'No backup yet')+'</p>'
+    +'<p style="font-size:0.7rem;color:#aaa;margin-bottom:16px">Auto backup runs daily at 11PM silently.</p>'
+    +'<div style="text-align:right">'
+    +'<button onclick="closeModal(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Close</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
 }
 
-function importFromSheets(){
-  var gasUrl=document.getElementById('gas-url-input').value.trim();
-  if(!gasUrl){alert('Please enter your Google Apps Script URL');return;}
-  LS.set('scriptUrl',gasUrl);
-  closeModal('sync-modal');
-  showSyncStatus('Importing from Google Sheets...','#e67e22');
-  fetch(gasUrl+'?action=pull')
-  .then(function(r){return r.json();})
-  .then(function(d){
-    if(d.status!=='ok'){showSyncStatus('Import failed','#c0392b');return;}
-    if(d.records&&d.records.length){records=fixRecordDates(d.records);LS.set('dental-records',JSON.stringify(records));}
-    if(d.pharmacyIncome&&d.pharmacyIncome.length){pharmacyIncome=fixRecordDates(d.pharmacyIncome);LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));}
-    if(d.pharmacyPurchase&&d.pharmacyPurchase.length){pharmacyPurchase=fixRecordDates(d.pharmacyPurchase);LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));}
-    if(d.pharmacyExpend&&d.pharmacyExpend.length){pharmacyExpend=fixRecordDates(d.pharmacyExpend);LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));}
-    if(d.invStockIn&&d.invStockIn.length){invStockIn=fixRecordDates(d.invStockIn);LS.set('invStockIn',JSON.stringify(invStockIn));}
-    if(d.lowStockAlerts&&d.lowStockAlerts.length){lowStockAlerts=d.lowStockAlerts;LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));}
-    if(d.caseRecordsFlat&&d.caseRecordsFlat.length){
-      var cr={fixed:[],removable:[],implant:[],ortho:[]};
-      d.caseRecordsFlat.forEach(function(row){
-        var cat=String(row.category||'').trim().toLowerCase();
-        if(!cat||!cr.hasOwnProperty(cat)) return;
-        var rec={};
-        Object.keys(row).forEach(function(k){
-          if(k==='category') return;
-          if(k==='depositLog'){try{rec[k]=JSON.parse(row[k]);}catch(e){rec[k]=[];}}
-          else rec[k]=row[k];
-        });
-        rec=fixRecordDates([rec])[0];
-        rec.done=(rec.done===true||rec.done==='true');
-        cr[cat].push(rec);
-      });
-      caseRecords=cr;
-      LS.set('caseRecords',JSON.stringify(caseRecords));
-    }
-    appFullyLoaded=true;
-    firebasePush();
-    ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
-    goTo(currentPage,null);
-    showSyncStatus('Import complete! Saved to Firebase.','#27ae60');
-  })
-  .catch(function(){
-    showSyncStatus('Import failed - check your Apps Script URL','#c0392b');
-  });
-}
-
-// ── Backup to Google Sheets ──
+// ── Backup to Google Sheets (reads from Supabase) ──
 var backupTimer=null;
 var backupRetryCount=0;
 var MAX_BACKUP_RETRIES=3;
-var BACKUP_RETRY_DELAY=30000; // 30 seconds between retries
+var BACKUP_RETRY_DELAY=30000;
 
 function updateBackupLabel(text,color){
-  // Update label in sync modal if open
   var el=document.getElementById('last-backup-label');
   if(el){el.textContent=text;el.style.color=color||'#aaa';}
-  // Update persistent status bar
   var sb=document.getElementById('backup-status-bar');
   if(sb){sb.textContent=text;sb.style.color=color||'#7aaa9e';}
 }
 
-function backupToSheets(silent, retryCount){
+function backupToSheets(silent,retryCount){
   retryCount=retryCount||0;
-  var gasUrl=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbxHNlEppWjIK1noC7ekTfQH-5A_oSRYMj68giAPaPgv4s_gNwQ1E3bmO-3Oak4klikZ5Q/exec';
-  if(!gasUrl){if(!silent)alert('No Apps Script URL set in Sync Settings');return;}
+  var gasUrl=LS.get('scriptUrl')||'https://script.google.com/macros/s/AKfycbzpLW3yI7XAU9es5vMoRpsszYRY8oDijN8faBzTdouamZAqi7qoBxPPixLIeoXsDpOY/exec';
+  if(!gasUrl){if(!silent)alert('No Apps Script URL configured');return;}
 
-  var statusMsg=retryCount>0?'Backup retrying ('+retryCount+'/'+MAX_BACKUP_RETRIES+')...':'Backing up...';
+  var statusMsg=retryCount>0?'Backup retrying ('+retryCount+'/'+MAX_BACKUP_RETRIES+')...':'Backing up to Google Sheets...';
   updateBackupLabel(statusMsg,'#e67e22');
   if(!silent) showSyncStatus(statusMsg,'#e67e22');
 
-  // Flatten caseRecords
-  var caseRecordsFlat=[];
-  ['fixed','removable','implant','ortho'].forEach(function(cat){
-    (caseRecords[cat]||[]).forEach(function(r){
-      var row={category:cat};
-      Object.keys(r).forEach(function(k){
-        if(k==='depositLog') row[k]=JSON.stringify(r[k]||[]);
-        else row[k]=r[k];
-      });
-      caseRecordsFlat.push(row);
+  // Read all data from Supabase then send to Google Sheets
+  var fetches=[
+    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc').then(function(r){return r.json();}),
+    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc').then(function(r){return r.json();}),
+    sbFetch('pharmacy_income','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
+    sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
+    sbFetch('pharmacy_expend','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
+    sbFetch('inv_stock_in','GET',null,'deleted=eq.false').then(function(r){return r.json();})
+  ];
+
+  Promise.all(fetches)
+  .then(function(results){
+    var sbRecords=results[0]||[];
+    var sbCaseRecords=results[1]||[];
+    var sbPharmacyIncome=results[2]||[];
+    var sbPharmacyPurchase=results[3]||[];
+    var sbPharmacyExpend=results[4]||[];
+    var sbInvStockIn=results[5]||[];
+
+    // Convert case_records to flat format for backup
+    var caseRecordsFlat=sbCaseRecords.map(function(r){
+      return {category:r.category,date:r.date,treat:r.treat,name:r.name,
+              age:r.age,sex:r.sex,newold:r.newold,address:r.address,
+              phone:r.phone,drname:r.drname,total:r.total,drnote:r.drnote,
+              depositlog:r.depositlog,done:r.done};
     });
-  });
 
-  var payload={
-    action:'backup',
-    records:records,
-    caseRecordsFlat:caseRecordsFlat,
-    pharmacyIncome:pharmacyIncome,
-    pharmacyPurchase:pharmacyPurchase,
-    pharmacyExpend:pharmacyExpend,
-    invStockIn:invStockIn
-  };
+    // Convert records for backup
+    var dailyRecords=sbRecords.map(function(r){
+      return {date:r.date,on:r.on_,cas:r.cas,price:r.price,
+              doctor:r.doctor,ptname:r.ptname,fromcase:r.fromcase};
+    });
 
-  fetch(gasUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)})
+    var payload={
+      action:'backup',
+      records:dailyRecords,
+      caseRecordsFlat:caseRecordsFlat,
+      pharmacyIncome:sbPharmacyIncome.map(function(r){return {date:r.date,retail:r.retail,wholesale:r.wholesale};}),
+      pharmacyPurchase:sbPharmacyPurchase.map(function(r){return {date:r.date,supplier:r.supplier,amount:r.amount,unit:r.unit,status:r.status,remark:r.remark};}),
+      pharmacyExpend:sbPharmacyExpend.map(function(r){return {date:r.date,items:r.items,amount:r.amount,unit:r.unit};}),
+      invStockIn:sbInvStockIn.map(function(r){return {date:r.date,supplier:r.supplier,items:r.items,qty:r.qty,price:r.price,category:r.category};})
+    };
+
+    return fetch(gasUrl,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+  })
   .then(function(r){return r.json();})
   .then(function(d){
     if(d.status==='ok'){
@@ -5497,35 +5610,25 @@ function backupToSheets(silent, retryCount){
       updateBackupLabel(msg,'#27ae60');
       if(!silent) showSyncStatus('Backup saved to Google Sheets','#27ae60');
     } else {
-      handleBackupFailure(silent, retryCount, 'Backup error: '+(d.error||'Unknown error'));
+      handleBackupFailure(silent,retryCount,'Backup error: '+(d.error||'Unknown'));
     }
   })
-  .catch(function(err){
-    handleBackupFailure(silent, retryCount, 'Backup failed - no connection');
+  .catch(function(){
+    handleBackupFailure(silent,retryCount,'Backup failed - check connection');
   });
 }
 
-function handleBackupFailure(silent, retryCount, reason){
-  var msg='❌ '+reason;
-  updateBackupLabel(msg,'#c0392b');
+function handleBackupFailure(silent,retryCount,reason){
+  updateBackupLabel('❌ '+reason,'#c0392b');
   if(!silent) showSyncStatus(reason,'#c0392b');
-
-  if(retryCount < MAX_BACKUP_RETRIES){
-    // Retry after delay
-    var nextRetry=retryCount+1;
-    var delayMsg='⏳ Backup failed. Retrying in 30s... ('+nextRetry+'/'+MAX_BACKUP_RETRIES+')';
-    updateBackupLabel(delayMsg,'#e67e22');
-    setTimeout(function(){
-      backupToSheets(silent, nextRetry);
-    }, BACKUP_RETRY_DELAY);
+  if(retryCount<MAX_BACKUP_RETRIES){
+    var next=retryCount+1;
+    updateBackupLabel('⏳ Retrying in 30s... ('+next+'/'+MAX_BACKUP_RETRIES+')','#e67e22');
+    setTimeout(function(){backupToSheets(silent,next);},BACKUP_RETRY_DELAY);
   } else {
-    // All retries failed
     backupRetryCount=0;
-    var failMsg='❌ Backup failed after '+MAX_BACKUP_RETRIES+' attempts. Please backup manually.';
-    updateBackupLabel(failMsg,'#c0392b');
-    if(!silent){
-      alert('Backup failed after '+MAX_BACKUP_RETRIES+' attempts. Please check your internet connection and try again from Sync Settings.');
-    }
+    updateBackupLabel('❌ Backup failed after '+MAX_BACKUP_RETRIES+' attempts','#c0392b');
+    if(!silent) alert('Backup failed after '+MAX_BACKUP_RETRIES+' attempts. Please try again from Sync Settings.');
   }
 }
 
@@ -5533,7 +5636,6 @@ function scheduleAutoBackup(){
   clearInterval(backupTimer);
   backupTimer=setInterval(function(){
     var now=new Date();
-    // Backup at 11PM
     if(now.getHours()===23&&now.getMinutes()===0){
       var lastBackup=LS.get('lastBackup')||'';
       var today=now.toLocaleDateString();
