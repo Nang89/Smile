@@ -35,6 +35,27 @@ input, select, textarea{
   display:flex;flex-direction:column;
   padding:18px 12px;
   height:100vh;
+  transition:width 0.25s ease, padding 0.25s ease;
+  overflow:hidden;
+}
+.sidebar.collapsed{
+  width:52px;
+  padding:18px 8px;
+}
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .nav-item span:not(svg),
+.sidebar.collapsed .nav-item-text,
+.sidebar.collapsed #sidebar-role-label,
+.sidebar.collapsed .logout-text,
+.sidebar.collapsed .backup-status-bar-text{
+  display:none;
+}
+.sidebar.collapsed .nav-item{
+  justify-content:center;
+  padding:9px;
+}
+.sidebar.collapsed .logo-area{
+  justify-content:center;
 }
 .logo-area{
   display:flex;align-items:center;gap:9px;
@@ -285,81 +306,53 @@ input, select, textarea{
 
 <!-- ══ LOGIN SCREEN ══ -->
 <div id="login-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#1f4e4a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
-  <!-- Logo - tap 5 times to reveal Admin -->
-  <div id="login-logo" onclick="secretTap()" style="margin-bottom:8px;cursor:pointer;user-select:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" width="56" height="56">
+
+  <!-- Logo -->
+  <div id="login-logo" onclick="secretTap()" style="margin-bottom:12px;cursor:pointer;user-select:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" width="60" height="60">
       <path d="M12 5.5c-2-1.5-5-1.5-6.5 0C3 8 4 12 5 14.5S6 20 8 20c1.5 0 1.5-3 4-3s2.5 3 4 3c2 0 2-3 3-5.5S21 8 18.5 5.5C17 4 14 4 12 5.5z"/>
     </svg>
   </div>
-  <h1 style="color:#fff;font-size:1.4rem;font-weight:800;margin-bottom:4px">Smile Dental Clinic</h1>
-  <p style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:32px">Please select your role</p>
+  <h1 style="color:#fff;font-size:1.5rem;font-weight:800;margin-bottom:4px">Smile Dental Clinic</h1>
+  <p style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:32px">Enter your password to continue</p>
 
-  <!-- Role buttons — Admin hidden -->
-  <div id="login-roles" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:280px">
-    <button id="admin-role-btn" onclick="selectRole('admin')" style="display:none;padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:none;align-items:center;gap:12px">
-      <span style="font-size:1.3rem">👑</span> Admin
+  <!-- Password input only -->
+  <div style="width:100%;max-width:320px">
+    <div style="position:relative;margin-bottom:12px">
+      <input id="login-password-input" type="password" placeholder="Password"
+        style="width:100%;padding:14px 48px 14px 16px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:1rem;font-family:inherit;outline:none;box-sizing:border-box;caret-color:#fff"
+        onkeydown="if(event.key==='Enter') tryPasswordLogin()"/>
+      <button onclick="togglePasswordVis()" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:1.1rem" id="pw-vis-btn">👁</button>
+    </div>
+    <button onclick="tryPasswordLogin()"
+      style="width:100%;padding:14px;border:none;border-radius:12px;background:#27ae60;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit">
+      Unlock
     </button>
-    <button onclick="selectRole('cashier')" style="padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.3rem">💊</span> Cashier
-    </button>
-    <button onclick="selectRole('pharmacy')" style="padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.3rem">🏥</span> Pharmacy
-    </button>
-    <button onclick="selectRole('inventory')" style="padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px">
-      <span style="font-size:1.3rem">📦</span> Inventory
-    </button>
+    <p style="color:rgba(255,255,255,0.4);font-size:0.75rem;text-align:center;margin-top:12px">Admin or Staff password accepted</p>
+    <div id="pin-error" style="color:#ff8a80;font-size:0.82rem;text-align:center;margin-top:8px;display:none">Wrong password. Try again.</div>
   </div>
 
-  <!-- PIN entry (hidden until role selected) -->
-  <div id="login-pin-section" style="display:none;width:100%;max-width:280px;margin-top:24px">
-    <div id="login-role-label" style="color:rgba(255,255,255,0.8);font-size:0.82rem;font-weight:600;margin-bottom:12px;text-align:center"></div>
-    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px" id="pin-dots">
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
-      <div class="pin-dot"></div>
-    </div>
-    <!-- Numpad -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      <button onclick="pinKey('1')" class="pin-btn">1</button>
-      <button onclick="pinKey('2')" class="pin-btn">2</button>
-      <button onclick="pinKey('3')" class="pin-btn">3</button>
-      <button onclick="pinKey('4')" class="pin-btn">4</button>
-      <button onclick="pinKey('5')" class="pin-btn">5</button>
-      <button onclick="pinKey('6')" class="pin-btn">6</button>
-      <button onclick="pinKey('7')" class="pin-btn">7</button>
-      <button onclick="pinKey('8')" class="pin-btn">8</button>
-      <button onclick="pinKey('9')" class="pin-btn">9</button>
-      <button onclick="backRole()" class="pin-btn" style="background:rgba(255,255,255,0.08);font-size:0.8rem">← Back</button>
-      <button onclick="pinKey('0')" class="pin-btn">0</button>
-      <button onclick="pinDelete()" class="pin-btn" style="background:rgba(255,255,255,0.08);font-size:1.1rem">⌫</button>
-    </div>
-    <div id="pin-error" style="color:#ff8a80;font-size:0.82rem;text-align:center;margin-top:12px;display:none">Wrong PIN. Try again.</div>
-  </div>
-
-  <!-- Logout button (shown in app) -->
 </div>
 
 <style>
-.pin-dot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,0.25);transition:background 0.15s}
-.pin-dot.filled{background:#fff}
-.pin-btn{padding:16px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;font-family:inherit;transition:background 0.1s}
-.pin-btn:active{background:rgba(255,255,255,0.3)}
+#login-password-input::placeholder{color:rgba(255,255,255,0.4);}
 </style>
 
 <div class="shell">
 
   <!-- ══ COL 1: SIDEBAR ══ -->
   <aside class="sidebar">
-    <div class="logo-area">
+    <div class="logo-area" style="position:relative">
       <div class="logo-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3a2a10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 5.5c-2-1.5-5-1.5-6.5 0C3 8 4 12 5 14.5S6 20 8 20c1.5 0 1.5-3 4-3s2.5 3 4 3c2 0 2-3 3-5.5S21 8 18.5 5.5C17 4 14 4 12 5.5z"/>
         </svg>
       </div>
       <div class="logo-text"><b>Smile Dental</b><small id="sidebar-role-label">Clinic Suite</small></div>
+      <button onclick="toggleSidebar()" id="sidebar-toggle" title="Toggle sidebar"
+        style="position:absolute;right:-4px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:rgba(255,255,255,0.6);cursor:pointer;padding:4px 6px;font-size:0.75rem;line-height:1">
+        ◀
+      </button>
     </div>
     <nav>
       <div class="nav-item" onclick="goTo('dashboard',this)">
@@ -1548,48 +1541,49 @@ function secretTap(){
 }
 
 
-const PINS={admin:'000113',cashier:'2222',pharmacy:'3333',inventory:'4444'};
+const PINS={admin:'Smile2024',cashier:'2222',pharmacy:'3333',inventory:'4444'};
 const ROLE_LABELS={admin:'Admin',cashier:'Cashier',pharmacy:'Pharmacy',inventory:'Inventory'};
 let currentRole=null;
 let pinEntry='';
 let selectedRole=null;
 
-function selectRole(role){
-  selectedRole=role;
-  document.getElementById('login-roles').style.display='none';
-  document.getElementById('login-pin-section').style.display='block';
-  document.getElementById('login-role-label').textContent='Enter PIN for '+ROLE_LABELS[role];
-  pinEntry='';
-  updatePinDots();
-  document.getElementById('pin-error').style.display='none';
+function selectRole(role){ selectedRole=role; }
+
+function togglePasswordVis(){
+  var inp=document.getElementById('login-password-input');
+  var btn=document.getElementById('pw-vis-btn');
+  if(!inp) return;
+  if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}
+  else{inp.type='password';btn.textContent='👁';}
 }
-function backRole(){
-  document.getElementById('login-roles').style.display='flex';
-  document.getElementById('login-pin-section').style.display='none';
-  selectedRole=null;pinEntry='';
-}
-function pinKey(k){
-  if(pinEntry.length>=6)return;
-  pinEntry+=k;
-  updatePinDots();
-  if(pinEntry===PINS[selectedRole]){
-    setTimeout(function(){doLogin(selectedRole);},200);
-  } else if(pinEntry.length>=6){
-    document.getElementById('pin-error').style.display='block';
-    setTimeout(function(){pinEntry='';updatePinDots();document.getElementById('pin-error').style.display='none';},1000);
+
+function tryPasswordLogin(){
+  var inp=document.getElementById('login-password-input');
+  var entered=inp?inp.value:'';
+  var err=document.getElementById('pin-error');
+  // Check which role the password matches
+  var matchedRole=null;
+  var roles=['admin','cashier','pharmacy','inventory'];
+  for(var i=0;i<roles.length;i++){
+    if(entered===PINS[roles[i]]){
+      matchedRole=roles[i];
+      break;
+    }
+  }
+  if(matchedRole){
+    if(inp) inp.value='';
+    if(err) err.style.display='none';
+    doLogin(matchedRole);
+  } else {
+    if(err){err.style.display='block';err.textContent='Wrong password. Try again.';}
+    if(inp){inp.value='';inp.focus();}
   }
 }
-function pinDelete(){
-  pinEntry=pinEntry.slice(0,-1);
-  updatePinDots();
-  document.getElementById('pin-error').style.display='none';
-}
-function updatePinDots(){
-  var dots=document.getElementById('pin-dots').children;
-  for(var i=0;i<dots.length;i++){
-    dots[i].className='pin-dot'+(i<pinEntry.length?' filled':'');
-  }
-}
+
+function backRole(){selectedRole=null;}
+function pinKey(k){pinEntry+=k;}
+function pinDelete(){pinEntry=pinEntry.slice(0,-1);}
+function updatePinDots(){}
 function doLogin(role){
   currentRole=role;
   document.getElementById('login-screen').style.display='none';
@@ -1644,6 +1638,24 @@ function applyRoleAccess(role){
       n.style.display=allowed.indexOf(match[1])>=0?'':'none';
     }
   });
+
+  // Auto-hide sidebar completely if only one menu item (single-role users)
+  var sidebar=document.querySelector('.sidebar');
+  var btn=document.getElementById('sidebar-toggle');
+  if(allowed.length<=1){
+    if(sidebar) sidebar.style.display='none';
+  } else {
+    if(sidebar) sidebar.style.display='flex';
+    // Restore saved collapse state for multi-menu roles
+    var saved=LS.get('sidebarCollapsed');
+    if(saved==='1'){
+      if(sidebar) sidebar.classList.add('collapsed');
+      if(btn) btn.textContent='▶';
+    } else {
+      if(sidebar) sidebar.classList.remove('collapsed');
+      if(btn) btn.textContent='◀';
+    }
+  }
 
   // Cashier: hide date navigation in daily records
   var dateNav=document.querySelector('.records-panel .month-nav');
@@ -5062,6 +5074,16 @@ function switchCaseTab(name, el){
 var pageTitles={patients:'Daily Record',dashboard:'Dashboard',cases:'Case Records',inventory:'Inventory',pharmacy:'Pharmacy',patientreport:'Patient Reports',incomereport:'Income Report'};
 
 // Re-render whatever page is currently active
+function toggleSidebar(){
+  var sidebar=document.querySelector('.sidebar');
+  var btn=document.getElementById('sidebar-toggle');
+  if(!sidebar) return;
+  sidebar.classList.toggle('collapsed');
+  var isCollapsed=sidebar.classList.contains('collapsed');
+  if(btn) btn.textContent=isCollapsed?'▶':'◀';
+  LS.set('sidebarCollapsed',isCollapsed?'1':'0');
+}
+
 function showSyncStatus(msg,color){
   var el=document.getElementById('sync-status');
   if(!el)return;
