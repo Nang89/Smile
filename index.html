@@ -379,10 +379,6 @@ input, select, textarea{
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Patient Reports
       </div>
-      <div class="nav-item" onclick="goTo('settings',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-        Settings
-      </div>
       <div class="nav-item" onclick="goTo('incomereport',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
         Income Report
@@ -396,6 +392,10 @@ input, select, textarea{
       <div id="sync-status" style="display:none;font-size:0.72rem;text-align:center;padding:4px 8px;border-radius:6px;background:#E5F5E0"></div>
       <div id="backup-status-bar" style="font-size:0.68rem;color:#7aaa9e;text-align:center;padding:2px 4px;min-height:16px;word-break:break-word"></div>
 
+      <button id="settings-nav-btn" onclick="goTo('settings',this)" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        Settings
+      </button>
       <button onclick="logout()" style="width:100%;padding:10px;border:none;border-radius:8px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:center">⏻ Logout</button>
     </div>
   </aside>
@@ -1827,13 +1827,13 @@ function handleCaseDrChange(){
     custom.onkeydown=function(e){
       if(e.key==='Enter'){
         const v=custom.value.trim();if(!v)return;
-        if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();}
+        if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();saveAllSettings();}
         sel.value=v;custom.style.display='none';
       }
     };
     custom.onblur=function(){
       const v=custom.value.trim();
-      if(v){if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();}sel.value=v;}
+      if(v){if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();saveAllSettings();}sel.value=v;}
       else{sel.value='';}custom.style.display='none';
     };
   } else {custom.style.display='none';}
@@ -1871,6 +1871,7 @@ function handleCaseChange(prefix){
           caseList.push(v);
           LS.set('caseList',JSON.stringify(caseList));
           buildSelects();
+          saveAllSettings();
         }
         sel.value=v;
         custom.style.display='none';
@@ -1883,6 +1884,7 @@ function handleCaseChange(prefix){
           caseList.push(v);
           LS.set('caseList',JSON.stringify(caseList));
           buildSelects();
+          saveAllSettings();
         }
         sel.value=v;
       } else {
@@ -1910,6 +1912,7 @@ function handleDrChange(prefix){
           drList.push(v);
           LS.set('drList',JSON.stringify(drList));
           buildSelects();
+          saveAllSettings();
         }
         sel.value=v;
         custom.style.display='none';
@@ -1922,6 +1925,7 @@ function handleDrChange(prefix){
           drList.push(v);
           LS.set('drList',JSON.stringify(drList));
           buildSelects();
+          saveAllSettings();
         }
         sel.value=v;
       } else {
@@ -1941,13 +1945,13 @@ function mDrSelectChange(){}
 function addCaseItem(){
   const val=prompt('Enter new case name:');if(!val||!val.trim())return;
   const v=val.trim();
-  if(!caseList.includes(v)){caseList.push(v);LS.set('caseList',JSON.stringify(caseList));buildSelects();}
+  if(!caseList.includes(v)){caseList.push(v);LS.set('caseList',JSON.stringify(caseList));buildSelects();saveAllSettings();}
   ['f-case-select','mf-case-select'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=v;});
 }
 function addDrItem(){
   const val=prompt('Enter new doctor name:');if(!val||!val.trim())return;
   const v=val.trim();
-  if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();}
+  if(!drList.includes(v)){drList.push(v);LS.set('drList',JSON.stringify(drList));buildSelects();saveAllSettings();}
   ['f-doctor-select','mf-doctor-select'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=v;});
 }
 buildSelects();
@@ -3234,6 +3238,7 @@ function saveInvStockEdit(idx){
   invStockIn[idx].items=document.getElementById('ise-items').value;
   invStockIn[idx].qty=document.getElementById('ise-qty').value;
   invStockIn[idx].price=document.getElementById('ise-price').value;
+  fbSaveInvStockIn(invStockIn[idx]);
   LS.set('invStockIn',JSON.stringify(invStockIn));
   document.getElementById('inv-stock-edit-modal').remove();
   renderInvStockIn();
@@ -4926,9 +4931,13 @@ function openPaymentMenu(caseType, recIdx){
   if(isDone){
     doneOpt.textContent='Unmark Done';
     doneOpt.onclick=function(){
-      caseRecords[caseType][recIdx].done=false;
-      caseRecords[caseType][recIdx].doneDate='';
-      saveCaseRecords();renderCaseTable(caseType);overlay.remove();
+      var cr=caseRecords[caseType][recIdx];
+      cr.done=false;
+      cr.doneDate='';
+      cr.updatedAt=Date.now();
+      LS.set('caseRecords',JSON.stringify(caseRecords));
+      fbSaveCaseRecord(caseType,cr);
+      renderCaseTable(caseType);overlay.remove();
     };
   } else {
     doneOpt.textContent='Mark as Done';
@@ -4987,9 +4996,12 @@ function openDonePopup(caseType, recIdx){
     var ct=this.getAttribute('data-ct');
     var idx=parseInt(this.getAttribute('data-rec'));
     var d=document.getElementById('done-date-input').value;
-    caseRecords[ct][idx].done=true;
-    caseRecords[ct][idx].doneDate=d;
-    saveCaseRecords();
+    var cr=caseRecords[ct][idx];
+    cr.done=true;
+    cr.doneDate=d;
+    cr.updatedAt=Date.now();
+    LS.set('caseRecords',JSON.stringify(caseRecords));
+    fbSaveCaseRecord(ct,cr);
     renderCaseTable(ct);
     overlay.remove();
   };
@@ -5004,12 +5016,28 @@ function openDonePopup(caseType, recIdx){
   document.body.appendChild(overlay);
 }
 
-function openPaymentPopup(caseType, recIdx){
+function findCaseRecIdxByKey(caseType, key){
+  if(!key) return -1;
+  var arr=caseRecords[caseType]||[];
+  for(var i=0;i<arr.length;i++){
+    if(arr[i]._key===key) return i;
+  }
+  return -1;
+}
+
+function openPaymentPopup(caseType, recIdx, recKey){
   var old=document.getElementById('payment-popup');
   if(old)old.remove();
 
+  // Prefer stable lookup by _key (survives caseRecords being replaced by realtime reload)
+  if(recKey){
+    var foundIdx=findCaseRecIdxByKey(caseType, recKey);
+    if(foundIdx>=0) recIdx=foundIdx;
+  }
+
   var r=caseRecords[caseType][recIdx];
   if(!r)return;
+  recKey=r._key;
   var entries=r.depositLog||[];
   var totalAmt=Number(r.total||0);
   var totalPaid=entries.reduce(function(s,e){return s+Number(e.amount||0);},0);
@@ -5065,8 +5093,9 @@ function openPaymentPopup(caseType, recIdx){
     xBtn.style.cssText='padding:2px 7px;border:none;border-radius:4px;background:#fde4e2;color:#c0392b;cursor:pointer;font-size:0.75rem;font-weight:700';
     xBtn.setAttribute('data-ct',caseType);
     xBtn.setAttribute('data-rec',recIdx);
+    xBtn.setAttribute('data-key',recKey);
     xBtn.setAttribute('data-ei',ei);
-    xBtn.onclick=function(){removePaymentEntry(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')),parseInt(this.getAttribute('data-ei')));};
+    xBtn.onclick=function(){removePaymentEntry(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')),parseInt(this.getAttribute('data-ei')),this.getAttribute('data-key'));};
     td4.appendChild(xBtn);
     tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);tr.appendChild(td4);
     tbody.appendChild(tr);
@@ -5084,7 +5113,8 @@ function openPaymentPopup(caseType, recIdx){
   addBtn.style.cssText='padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;font-weight:700;cursor:pointer;font-size:0.85rem;white-space:nowrap';
   addBtn.setAttribute('data-ct',caseType);
   addBtn.setAttribute('data-rec',recIdx);
-  addBtn.onclick=function(){addPaymentEntry(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')));};
+  addBtn.setAttribute('data-key',recKey);
+  addBtn.onclick=function(){addPaymentEntry(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')),this.getAttribute('data-key'));};
   inputRow.appendChild(addBtn);
 
   box.appendChild(hdr);
@@ -5095,7 +5125,12 @@ function openPaymentPopup(caseType, recIdx){
   document.getElementById('pay-date').valueAsDate=new Date();
 }
 
-function addPaymentEntry(caseType,recIdx){
+function addPaymentEntry(caseType,recIdx,recKey){
+  // Resolve to the current correct index using the stable key, in case caseRecords was reloaded/reordered
+  if(recKey){
+    var foundIdx=findCaseRecIdxByKey(caseType, recKey);
+    if(foundIdx>=0) recIdx=foundIdx;
+  }
   var amount=document.getElementById('pay-amount').value;
   var date=document.getElementById('pay-date').value;
   var note=document.getElementById('pay-note').value.trim();
@@ -5104,6 +5139,7 @@ function addPaymentEntry(caseType,recIdx){
   caseRecords[caseType][recIdx].depositLog.push({amount,date,note});
   var cr=caseRecords[caseType][recIdx];
   cr.updatedAt=Date.now();
+  recKey=cr._key;
   LS.set('caseRecords',JSON.stringify(caseRecords));
   fbSaveCaseRecord(caseType,cr);
 
@@ -5129,39 +5165,47 @@ function addPaymentEntry(caseType,recIdx){
 
   document.getElementById('payment-popup').remove();
   renderCaseTable(caseType);
-  openPaymentPopup(caseType,recIdx);
+  openPaymentPopup(caseType,recIdx,recKey);
 }
 
-function removePaymentEntry(caseType,recIdx,entryIdx){
+function removePaymentEntry(caseType,recIdx,entryIdx,recKey){
+  if(recKey){
+    var foundIdx=findCaseRecIdxByKey(caseType, recKey);
+    if(foundIdx>=0) recIdx=foundIdx;
+  }
   var rec=caseRecords[caseType][recIdx];
   var entry=rec.depositLog[entryIdx];
   // Remove matching daily record by date + ptname + cas + price
   if(entry){
     var before=records.length;
     var removed=false;
+    var removedRec=null;
     records=records.filter(function(r){
       // Match once only — remove only the first matching daily record
       if(!removed && r.ptname===rec.name && r.cas===rec.treat &&
          r.date===entry.date && String(r.price)===String(entry.amount)){
         removed=true;
+        removedRec=r;
         return false;
       }
       return true;
     });
     if(records.length!==before){
       LS.set('dental-records',JSON.stringify(records));
+      if(removedRec) fbDeleteRecord(removedRec);
       render();
       updateBadges();
     }
   }
   rec.depositLog.splice(entryIdx,1);
   rec.updatedAt=Date.now();
+  recKey=rec._key;
   appFullyLoaded=true;
   LS.set('caseRecords',JSON.stringify(caseRecords));
   fbSaveCaseRecord(caseType,rec);
   document.getElementById('payment-popup').remove();
   renderCaseTable(caseType);
-  openPaymentPopup(caseType,recIdx);
+  openPaymentPopup(caseType,recIdx,recKey);
 }
 
 function delCaseRec(caseType,i){
@@ -5337,7 +5381,7 @@ var fbWritePending=false;
 
 // ── Supabase helpers ──
 function sbHeaders(){
-  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'};
+  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
 }
 
 function sbFetch(table,method,body,params){
@@ -5398,7 +5442,7 @@ function supabaseLoadAll(callback){
         var rec={
           date:r.date,treat:r.treat,name:r.name,age:r.age,sex:r.sex,
           newold:r.newold,address:r.address,phone:r.phone,drname:r.drname,
-          total:r.total,drnote:r.drnote,done:r.done,_key:r.id,
+          total:r.total,drnote:r.drnote,done:r.done,doneDate:r.donedate||'',_key:r.id,
           createdAt:r.createdat,updatedAt:r.updatedat,
           depositLog:[]
         };
@@ -5518,14 +5562,87 @@ function startSupabaseRealtime(){
       try{
         var msg=JSON.parse(e.data);
         if(msg.event==='postgres_changes'&&msg.payload&&msg.payload.data){
-          // Data changed on another device - reload that table
           var tbl=msg.payload.data.table;
-          supabaseReloadTable(tbl);
+          var changeType=msg.payload.data.type; // INSERT, UPDATE, DELETE
+          var newRow=msg.payload.data.record||null;
+          var oldRow=msg.payload.data.old_record||null;
+          // Apply the change directly from the payload instead of re-fetching
+          // (re-fetching races with our own pending writes and can revert local edits)
+          applyRealtimeChange(tbl, changeType, newRow, oldRow);
         }
       }catch(ex){}
     };
     ws.onerror=function(){showSyncStatus('Realtime error','#e67e22');};
   }catch(e){}
+}
+
+// Tracks _key values we just wrote ourselves, so we can ignore the echoed
+// realtime event for our own write (it can race ahead of our local state
+// if it arrives with stale data, or is simply redundant).
+var pendingOwnWrites={};
+function markOwnWrite(key){
+  pendingOwnWrites[key]=Date.now();
+  // Clean up after a few seconds so deletions/edits aren't blocked forever
+  setTimeout(function(){delete pendingOwnWrites[key];},4000);
+}
+
+function applyRealtimeChange(tbl, changeType, newRow, oldRow){
+  var key=(newRow&&newRow.id)||(oldRow&&oldRow.id);
+  if(key&&pendingOwnWrites[key]){
+    // This event is the echo of a write we just made locally — our local
+    // state is already correct (or newer), so skip re-applying it.
+    return;
+  }
+
+  if(tbl==='records'){
+    if(changeType==='DELETE'){
+      if(oldRow&&oldRow.id){
+        records=records.filter(function(r){return r._key!==oldRow.id;});
+      }
+    } else if(newRow){
+      if(newRow.deleted){
+        records=records.filter(function(r){return r._key!==newRow.id;});
+      } else {
+        var mapped={date:newRow.date,on:newRow.on_,cas:newRow.cas,price:newRow.price,
+                    doctor:newRow.doctor,ptname:newRow.ptname,fromCase:newRow.fromcase,
+                    _key:newRow.id,createdAt:newRow.createdat,updatedAt:newRow.updatedat};
+        var idx=records.findIndex(function(r){return r._key===newRow.id;});
+        if(idx>=0) records[idx]=mapped; else records.push(mapped);
+      }
+    }
+    records=fixRecordDates(records);
+    LS.set('dental-records',JSON.stringify(records));
+    updateBadges();
+    if(currentPage==='patients') render();
+    if(currentPage==='dashboard') renderDashboard();
+  }
+
+  if(tbl==='case_records'){
+    if(changeType==='DELETE'){
+      if(oldRow&&oldRow.id){
+        ['fixed','removable','implant','ortho'].forEach(function(cat){
+          caseRecords[cat]=caseRecords[cat].filter(function(r){return r._key!==oldRow.id;});
+        });
+      }
+    } else if(newRow){
+      var cat=newRow.category;
+      if(cat&&caseRecords[cat]){
+        if(newRow.deleted){
+          caseRecords[cat]=caseRecords[cat].filter(function(r){return r._key!==newRow.id;});
+        } else {
+          var rec={date:newRow.date,treat:newRow.treat,name:newRow.name,age:newRow.age,sex:newRow.sex,
+                    newold:newRow.newold,address:newRow.address,phone:newRow.phone,drname:newRow.drname,
+                    total:newRow.total,drnote:newRow.drnote,done:newRow.done,doneDate:newRow.donedate||'',_key:newRow.id,
+                    createdAt:newRow.createdat,updatedAt:newRow.updatedat,depositLog:[]};
+          try{rec.depositLog=JSON.parse(newRow.depositlog||'[]');}catch(e){rec.depositLog=[];}
+          var idx=caseRecords[cat].findIndex(function(r){return r._key===newRow.id;});
+          if(idx>=0) caseRecords[cat][idx]=rec; else caseRecords[cat].push(rec);
+        }
+      }
+    }
+    LS.set('caseRecords',JSON.stringify(caseRecords));
+    if(currentPage==='cases') ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+  }
 }
 
 function supabaseReloadTable(tbl){
@@ -5557,7 +5674,7 @@ function supabaseReloadTable(tbl){
           if(!cr[cat]) return;
           var rec={date:r.date,treat:r.treat,name:r.name,age:r.age,sex:r.sex,
                     newold:r.newold,address:r.address,phone:r.phone,drname:r.drname,
-                    total:r.total,drnote:r.drnote,done:r.done,_key:r.id,
+                    total:r.total,drnote:r.drnote,done:r.done,doneDate:r.donedate||'',_key:r.id,
                     createdAt:r.createdat,updatedAt:r.updatedat,depositLog:[]};
           try{rec.depositLog=JSON.parse(r.depositlog||'[]');}catch(e){rec.depositLog=[];}
           cr[cat].push(rec);
@@ -5588,17 +5705,19 @@ function fbSaveRecord(rec){
   if(!rec._key) rec._key=genId('rec');
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
+  markOwnWrite(rec._key);
   var row={id:rec._key,date:rec.date,on_:rec.on,cas:rec.cas,price:rec.price,
             doctor:rec.doctor,ptname:rec.ptname,fromcase:rec.fromCase||false,
             createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
   sbFetch('records','POST',[row],'on_conflict=id')
-  .then(function(){showSyncStatus('Saved','#27ae60');})
-  .catch(function(){showSyncStatus('Saved locally','#e67e22');});
+  .then(function(r){ if(!r.ok) throw new Error('save failed: '+r.status); showSyncStatus('Saved','#27ae60'); })
+  .catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 
 function fbDeleteRecord(rec){
   if(!rec._key) return;
+  markOwnWrite(rec._key);
   sbFetch('records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
   .catch(function(){});
 }
@@ -5607,19 +5726,22 @@ function fbSaveCaseRecord(caseType,rec){
   if(!rec._key) rec._key=genId('case');
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
+  markOwnWrite(rec._key);
   var row={id:rec._key,category:caseType,date:rec.date,treat:rec.treat,name:rec.name,
             age:rec.age,sex:rec.sex,newold:rec.newold,address:rec.address,phone:rec.phone,
             drname:rec.drname,total:rec.total,drnote:rec.drnote,
+            donedate:rec.doneDate||null,
             depositlog:JSON.stringify(rec.depositLog||[]),
             done:rec.done||false,createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
   sbFetch('case_records','POST',[row],'on_conflict=id')
-  .then(function(){showSyncStatus('Saved','#27ae60');})
-  .catch(function(){showSyncStatus('Saved locally','#e67e22');});
+  .then(function(r){ if(!r.ok) throw new Error('save failed: '+r.status); showSyncStatus('Saved','#27ae60'); })
+  .catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 
 function fbDeleteCaseRecord(caseType,rec){
   if(!rec._key) return;
+  markOwnWrite(rec._key);
   sbFetch('case_records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
   .catch(function(){});
 }
@@ -5628,7 +5750,7 @@ function fbSavePharmacyIncome(rec){
   if(!rec._key) rec._key=genId('phi');
   rec.updatedAt=Date.now();
   var row={id:rec._key,date:rec.date,retail:rec.retail,wholesale:rec.wholesale,updatedat:rec.updatedAt,deleted:false};
-  sbFetch('pharmacy_income','POST',[row],'on_conflict=id').catch(function(){});
+  sbFetch('pharmacy_income','POST',[row],'on_conflict=id').then(function(r){if(!r.ok)showSyncStatus('Save failed','#c0392b');}).catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 function fbDeletePharmacyIncome(rec){
@@ -5640,7 +5762,7 @@ function fbSavePharmacyPurchase(rec){
   if(!rec._key) rec._key=genId('php');
   rec.updatedAt=Date.now();
   var row={id:rec._key,date:rec.date,supplier:rec.supplier,amount:rec.amount,unit:rec.unit,status:rec.status,remark:rec.remark,updatedat:rec.updatedAt,deleted:false};
-  sbFetch('pharmacy_purchase','POST',[row],'on_conflict=id').catch(function(){});
+  sbFetch('pharmacy_purchase','POST',[row],'on_conflict=id').then(function(r){if(!r.ok)showSyncStatus('Save failed','#c0392b');}).catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 function fbDeletePharmacyPurchase(rec){
@@ -5652,7 +5774,7 @@ function fbSavePharmacyExpend(rec){
   if(!rec._key) rec._key=genId('phe');
   rec.updatedAt=Date.now();
   var row={id:rec._key,date:rec.date,items:rec.items,amount:rec.amount,unit:rec.unit,updatedat:rec.updatedAt,deleted:false};
-  sbFetch('pharmacy_expend','POST',[row],'on_conflict=id').catch(function(){});
+  sbFetch('pharmacy_expend','POST',[row],'on_conflict=id').then(function(r){if(!r.ok)showSyncStatus('Save failed','#c0392b');}).catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 function fbDeletePharmacyExpend(rec){
@@ -5664,7 +5786,7 @@ function fbSaveInvStockIn(rec){
   if(!rec._key) rec._key=genId('inv');
   rec.updatedAt=Date.now();
   var row={id:rec._key,date:rec.date,supplier:rec.supplier,items:rec.items,qty:rec.qty,price:rec.price,category:rec.category,updatedat:rec.updatedAt,deleted:false};
-  sbFetch('inv_stock_in','POST',[row],'on_conflict=id').catch(function(){});
+  sbFetch('inv_stock_in','POST',[row],'on_conflict=id').then(function(r){if(!r.ok)showSyncStatus('Save failed','#c0392b');}).catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
   return rec;
 }
 function fbDeleteInvStockIn(rec){
