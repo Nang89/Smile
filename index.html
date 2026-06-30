@@ -549,15 +549,11 @@ input, select, textarea{
               <input type="hidden" id="f-oldnew"/>
             </div>
             <div class="f-group">
-              <label class="f-label">Case <span class="f-req">*</span></label>
-              <select class="f-input" id="f-case-select" onchange="handleCaseChange('f')">
-                <option value="">— Select —</option>
-              </select>
-              <input class="f-input" type="text" id="f-case-custom" placeholder="Type case here..." style="margin-top:5px;display:none"/>
-            </div>
-            <div class="f-group">
-              <label class="f-label">Price</label>
-              <input class="f-input" type="number" id="f-price" placeholder="e.g. 1500" min="0"/>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <label class="f-label">Treatment <span class="f-req">*</span></label>
+                <button type="button" onclick="addTreatmentRow('f')" style="background:none;border:none;color:#1f4e4a;font-size:0.78rem;font-weight:700;cursor:pointer;padding:0">+ Add Treatment</button>
+              </div>
+              <div id="f-treatments-list" style="display:flex;flex-direction:column;gap:8px"></div>
             </div>
             <div class="f-group">
               <label class="f-label">Dr Name</label>
@@ -1729,15 +1725,11 @@ input, select, textarea{
         <input type="hidden" id="mf-oldnew"/>
       </div>
       <div class="f-group">
-        <label class="f-label">Case <span class="f-req">*</span></label>
-        <select class="f-input" id="mf-case-select" onchange="handleCaseChange('mf')">
-          <option value="">— Select —</option>
-        </select>
-        <input class="f-input" type="text" id="mf-case-custom" placeholder="Type case here..." style="margin-top:5px;display:none"/>
-      </div>
-      <div class="f-group">
-        <label class="f-label">Price</label>
-        <input class="f-input" type="number" id="mf-price" placeholder="e.g. 1500" min="0"/>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <label class="f-label">Treatment <span class="f-req">*</span></label>
+          <button type="button" onclick="addTreatmentRow('mf')" style="background:none;border:none;color:#1f4e4a;font-size:0.78rem;font-weight:700;cursor:pointer;padding:0">+ Add Treatment</button>
+        </div>
+        <div id="mf-treatments-list" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
       <div class="f-group">
         <label class="f-label">Dr Name</label>
@@ -1962,6 +1954,142 @@ function buildSelects(){
   });
 }
 
+function buildCaseOptionsInto(sel){
+  sel.innerHTML='<option value="">-- Select --</option>';
+  caseList.forEach(function(c){
+    var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);
+  });
+  var add=document.createElement('option');add.value='__add__';add.textContent='Add Text';sel.appendChild(add);
+}
+
+function setupCaseRowAutocomplete(sel,custom){
+  sel.onchange=function(){
+    if(sel.value==='__add__'){
+      custom.style.display='block';
+      custom.value='';
+      custom.focus();
+      custom.onkeydown=function(e){
+        if(e.key==='Enter'){
+          var v=custom.value.trim();
+          if(!v) return;
+          if(!caseList.includes(v)){
+            caseList.push(v);
+            LS.set('caseList',JSON.stringify(caseList));
+            saveAllSettings();
+          }
+          buildCaseOptionsInto(sel);
+          sel.value=v;
+          custom.style.display='none';
+        }
+      };
+      custom.onblur=function(){
+        var v=custom.value.trim();
+        if(v){
+          if(!caseList.includes(v)){
+            caseList.push(v);
+            LS.set('caseList',JSON.stringify(caseList));
+            saveAllSettings();
+          }
+          buildCaseOptionsInto(sel);
+          sel.value=v;
+        } else {
+          sel.value='';
+        }
+        custom.style.display='none';
+      };
+    } else {
+      custom.style.display='none';
+      custom.value='';
+    }
+  };
+}
+
+function addTreatmentRow(prefix){
+  var list=document.getElementById(prefix+'-treatments-list');
+  if(!list) return;
+  var existingRows=list.children.length;
+
+  var row=document.createElement('div');
+  row.style.cssText='display:flex;gap:8px;align-items:flex-start;position:relative';
+
+  var caseWrap=document.createElement('div');
+  caseWrap.style.cssText='flex:1.3;min-width:0';
+  var sel=document.createElement('select');
+  sel.className='f-input';
+  buildCaseOptionsInto(sel);
+  var custom=document.createElement('input');
+  custom.className='f-input';custom.type='text';
+  custom.placeholder='Type case here...';
+  custom.style.cssText='margin-top:5px;display:none';
+  setupCaseRowAutocomplete(sel,custom);
+  caseWrap.appendChild(sel);caseWrap.appendChild(custom);
+
+  var priceWrap=document.createElement('div');
+  priceWrap.style.cssText='flex:1;min-width:0';
+  var priceInput=document.createElement('input');
+  priceInput.className='f-input';priceInput.type='number';
+  priceInput.placeholder='Price';priceInput.min='0';
+  priceWrap.appendChild(priceInput);
+
+  row.appendChild(caseWrap);
+  row.appendChild(priceWrap);
+
+  if(existingRows>0){
+    var delBtn=document.createElement('button');
+    delBtn.type='button';
+    delBtn.innerHTML='✕';
+    delBtn.style.cssText='background:#fde4e2;border:none;border-radius:6px;width:34px;height:34px;flex-shrink:0;font-size:0.8rem;cursor:pointer;color:#c0392b;font-weight:700;margin-top:0';
+    delBtn.onclick=function(){row.remove();};
+    row.appendChild(delBtn);
+  }
+
+  list.appendChild(row);
+}
+
+function fillTreatmentRow(prefix,cas,price){
+  var list=document.getElementById(prefix+'-treatments-list');
+  if(!list||!list.firstChild) return;
+  var row=list.firstChild;
+  var sel=row.querySelector('select');
+  var custom=row.querySelector('input[type="text"]');
+  var priceInput=row.querySelector('input[type="number"]');
+  if(sel){
+    if(cas&&!caseList.includes(cas)){
+      // The saved treatment isn't in the current list (e.g. it was typed
+      // as a one-off and never added) — fall back to the Add Text input
+      // so the existing value isn't silently lost or shown blank.
+      sel.value='__add__';
+      if(custom){custom.style.display='block';custom.value=cas;}
+    } else {
+      sel.value=cas||'';
+    }
+  }
+  if(priceInput) priceInput.value=price||'';
+}
+
+function setAddTreatmentVisible(prefix,visible){
+  var list=document.getElementById(prefix+'-treatments-list');
+  if(!list) return;
+  var btn=list.parentElement?list.parentElement.querySelector('button'):null;
+  if(btn) btn.style.display=visible?'':'none';
+}
+
+function readTreatmentRows(prefix){
+  var list=document.getElementById(prefix+'-treatments-list');
+  if(!list) return [];
+  var out=[];
+  Array.from(list.children).forEach(function(row){
+    var sel=row.querySelector('select');
+    var custom=row.querySelector('input[type="text"]');
+    var priceInput=row.querySelector('input[type="number"]');
+    if(!sel) return;
+    var cas=sel.value==='__add__'?(custom?custom.value.trim():''):sel.value;
+    var price=priceInput?priceInput.value:'';
+    if(cas&&price) out.push({cas:cas,price:price});
+  });
+  return out;
+}
+
 function handleCaseChange(prefix){
   const sel=document.getElementById(prefix+'-case-select');
   const custom=document.getElementById(prefix+'-case-custom');
@@ -2061,6 +2189,8 @@ function addDrItem(){
   ['f-doctor-select','mf-doctor-select'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=v;});
 }
 buildSelects();
+addTreatmentRow('f');
+addTreatmentRow('mf');
 
 // Mobile form modal
 function openModal(){
@@ -2071,6 +2201,19 @@ function openModal(){
   const m=String(viewDate.getMonth()+1).padStart(2,'0');
   const d=String(viewDate.getDate()).padStart(2,'0');
   document.getElementById('mf-date').value=y+'-'+m+'-'+d;
+  // Always reset to a fresh new-entry state, in case the modal was last
+  // left in edit mode (single locked row, Add button hidden).
+  editIdx=-1;editKey='';
+  setPillValue('mf-sex-pills','mf-sex','');
+  setPillValue('mf-oldnew-pills','mf-oldnew','');
+  document.getElementById('mf-treatments-list').innerHTML='';
+  addTreatmentRow('mf');
+  setAddTreatmentVisible('mf',true);
+  document.getElementById('mf-doctor-select').value='';
+  document.getElementById('mf-remark').value='';
+  document.getElementById('mf-doctor-custom').style.display='none';
+  const saveBtn=document.querySelector('#form-modal-overlay .f-btn');
+  if(saveBtn){saveBtn.textContent='+ Save Entry';saveBtn.onclick=function(){saveMobileEntry();};}
 }
 function closeModal(){
   document.getElementById('form-modal-overlay').classList.remove('open');
@@ -2082,38 +2225,47 @@ function saveMobileEntry(){
   const date = document.getElementById('mf-date').value;
   const on   = document.getElementById('mf-oldnew').value;
   const sex  = document.getElementById('mf-sex').value;
-  const caseSel=document.getElementById('mf-case-select').value;
-  const cas=caseSel==='__add__'?document.getElementById('mf-case-custom').value.trim():caseSel;
-  const price=document.getElementById('mf-price').value;
   const drSel=document.getElementById('mf-doctor-select').value;
   const doctor=drSel==='__add__'?document.getElementById('mf-doctor-custom').value.trim():drSel;
   const ptname= document.getElementById('mf-remark').value.trim();
-  if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
-  var row={date,on,sex,cas,price,doctor,ptname};
+  const treatments=readTreatmentRows('mf');
+  if(!date||!on||treatments.length===0){alert('Please fill Date, Old/New, and at least one Treatment');return;}
+
   if(editIdx>=0){
+    var t=treatments[0];
     if(editKey){
       var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
       if(resolvedIdx>=0) editIdx=resolvedIdx;
     }
+    var row={date,on,sex,cas:t.cas,price:t.price,doctor,ptname};
     row._key=records[editIdx]._key||genId('rec');
     row.createdAt=records[editIdx].createdAt||Date.now();
+    row.updatedAt=Date.now();
     records[editIdx]=row;
     editIdx=-1;
     editKey='';
+    LS.set('dental-records',JSON.stringify(records));
+    fbSaveRecord(row);
   } else {
-    row._key=genId('rec');
-    row.createdAt=Date.now();
-    records.push(row);
+    treatments.forEach(function(t){
+      var row={date,on,sex,cas:t.cas,price:t.price,doctor,ptname};
+      row._key=genId('rec');
+      row.createdAt=Date.now();
+      row.updatedAt=Date.now();
+      records.push(row);
+      fbSaveRecord(row);
+    });
+    LS.set('dental-records',JSON.stringify(records));
   }
-  row.updatedAt=Date.now();
-  LS.set('dental-records',JSON.stringify(records));
-  fbSaveRecord(row);
-  ['mf-price','mf-remark','mf-case-custom','mf-doctor-custom'].forEach(id=>document.getElementById(id).value='');
+
+  document.getElementById('mf-remark').value='';
+  document.getElementById('mf-doctor-custom').value='';
   setPillValue('mf-oldnew-pills','mf-oldnew','');
   setPillValue('mf-sex-pills','mf-sex','');
-  document.getElementById('mf-case-select').value='';
+  document.getElementById('mf-treatments-list').innerHTML='';
+  addTreatmentRow('mf');
+  setAddTreatmentVisible('mf',true);
   document.getElementById('mf-doctor-select').value='';
-  document.getElementById('mf-case-custom').style.display='none';
   document.getElementById('mf-doctor-custom').style.display='none';
   const saveBtn=document.querySelector('#form-modal-overlay .f-btn');
   if(saveBtn){saveBtn.textContent='+ Save Entry';saveBtn.onclick=function(){saveMobileEntry();};}
@@ -2165,33 +2317,45 @@ function saveEntry(){
   const date=document.getElementById('f-date').value;
   const on=document.getElementById('f-oldnew').value;
   const sex=document.getElementById('f-sex').value;
-  const caseSel=document.getElementById('f-case-select').value;
-  const cas=caseSel==='__add__'?document.getElementById('f-case-custom').value.trim():caseSel;
-  const price=document.getElementById('f-price').value;
   const drSel=document.getElementById('f-doctor-select').value;
   const doctor=drSel==='__add__'?document.getElementById('f-doctor-custom').value.trim():drSel;
   const ptname=document.getElementById('f-remark').value.trim();
-  if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
-  var row={date,on,sex,cas,price,doctor,ptname};
+  const treatments=readTreatmentRows('f');
+  if(!date||!on||treatments.length===0){alert('Please fill Date, Old/New, and at least one Treatment');return;}
+
   if(editIdx>=0){
+    // Editing always updates exactly one existing record, using only the
+    // first (and only) treatment row shown while editing.
+    var t=treatments[0];
     if(editKey){
       var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
       if(resolvedIdx>=0) editIdx=resolvedIdx;
     }
+    var row={date,on,sex,cas:t.cas,price:t.price,doctor,ptname};
     row._key=records[editIdx]._key||genId('rec');
     row.createdAt=records[editIdx].createdAt||Date.now();
+    row.updatedAt=Date.now();
     records[editIdx]=row;
     editIdx=-1;
     editKey='';
     document.getElementById('f-submit').textContent='+ Save Entry';
-  } else {
+    LS.set('dental-records',JSON.stringify(records));
+    fbSaveRecord(row);
+    resetForm();render();updateBadges();
+    return;
+  }
+
+  // New entry — one Daily Record row per treatment, sharing the same
+  // date/sex/old-new/doctor/patient name.
+  treatments.forEach(function(t){
+    var row={date,on,sex,cas:t.cas,price:t.price,doctor,ptname};
     row._key=genId('rec');
     row.createdAt=Date.now();
+    row.updatedAt=Date.now();
     records.push(row);
-  }
-  row.updatedAt=Date.now();
+    fbSaveRecord(row);
+  });
   LS.set('dental-records',JSON.stringify(records));
-  fbSaveRecord(row);
   resetForm();render();updateBadges();
 }
 
@@ -2201,12 +2365,13 @@ function resetForm(){
   const m=String(viewDate.getMonth()+1).padStart(2,'0');
   const d=String(viewDate.getDate()).padStart(2,'0');
   document.getElementById('f-date').value=y+'-'+m+'-'+d;
-  ['f-price','f-remark','f-case-custom','f-doctor-custom'].forEach(id=>document.getElementById(id).value='');
+  ['f-remark','f-doctor-custom'].forEach(id=>document.getElementById(id).value='');
   setPillValue('f-oldnew-pills','f-oldnew','');
   setPillValue('f-sex-pills','f-sex','');
-  document.getElementById('f-case-select').value='';
+  document.getElementById('f-treatments-list').innerHTML='';
+  addTreatmentRow('f');
+  setAddTreatmentVisible('f',true);
   document.getElementById('f-doctor-select').value='';
-  document.getElementById('f-case-custom').style.display='none';
   document.getElementById('f-doctor-custom').style.display='none';
 }
 
@@ -2223,11 +2388,12 @@ function editRec(i){
     document.getElementById('mf-date').value=r.date;
     setPillValue('mf-sex-pills','mf-sex',r.sex||'');
     setPillValue('mf-oldnew-pills','mf-oldnew',r.on||'');
-    document.getElementById('mf-case-select').value=r.cas;
-    document.getElementById('mf-price').value=r.price;
+    document.getElementById('mf-treatments-list').innerHTML='';
+    addTreatmentRow('mf');
+    fillTreatmentRow('mf',r.cas,r.price);
+    setAddTreatmentVisible('mf',false);
     document.getElementById('mf-doctor-select').value=r.doctor||'';
     document.getElementById('mf-remark').value=r.ptname||'';
-    document.getElementById('mf-case-custom').style.display='none';
     document.getElementById('mf-doctor-custom').style.display='none';
     // Change save button to update
     const saveBtn=document.querySelector('#form-modal-overlay .f-btn');
@@ -2237,11 +2403,12 @@ function editRec(i){
     document.getElementById('f-date').value=r.date;
     setPillValue('f-sex-pills','f-sex',r.sex||'');
     setPillValue('f-oldnew-pills','f-oldnew',r.on||'');
-    document.getElementById('f-case-select').value=r.cas;
-    document.getElementById('f-price').value=r.price;
+    document.getElementById('f-treatments-list').innerHTML='';
+    addTreatmentRow('f');
+    fillTreatmentRow('f',r.cas,r.price);
+    setAddTreatmentVisible('f',false);
     document.getElementById('f-doctor-select').value=r.doctor||'';
     document.getElementById('f-remark').value=r.ptname||'';
-    document.getElementById('f-case-custom').style.display='none';
     document.getElementById('f-doctor-custom').style.display='none';
     document.getElementById('f-submit').textContent='✓ Update Entry';
   }
@@ -5697,7 +5864,7 @@ function supabaseLoadAll(callback){
 
   // Load records
   sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
-  .then(function(r){return r.json();})
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
     if(Array.isArray(d)){
       records=fixRecordDates(d.map(function(r){
@@ -5708,11 +5875,11 @@ function supabaseLoadAll(callback){
       LS.set('dental-records',JSON.stringify(records));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');done();});
 
   // Load case records
   sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
-  .then(function(r){return r.json();})
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
     if(Array.isArray(d)){
       var cr={fixed:[],removable:[],implant:[],ortho:[]};
@@ -5733,7 +5900,7 @@ function supabaseLoadAll(callback){
       LS.set('caseRecords',JSON.stringify(caseRecords));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load case records failed:',e);showSyncStatus('Could not load Case Records - check connection','#c0392b');done();});
 
   // Load pharmacy income
   sbFetch('pharmacy_income','GET',null,'deleted=eq.false&order=updatedat.asc')
@@ -5746,7 +5913,7 @@ function supabaseLoadAll(callback){
       LS.set('pharmacyIncome',JSON.stringify(pharmacyIncome));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load pharmacy income failed:',e);done();});
 
   // Load pharmacy purchase
   sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&order=updatedat.asc')
@@ -5760,7 +5927,7 @@ function supabaseLoadAll(callback){
       LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load pharmacy purchase failed:',e);done();});
 
   // Load pharmacy expend
   sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&order=updatedat.asc')
@@ -5773,7 +5940,7 @@ function supabaseLoadAll(callback){
       LS.set('pharmacyExpend',JSON.stringify(pharmacyExpend));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load pharmacy expend failed:',e);done();});
 
   // Load inventory
   sbFetch('inv_stock_in','GET',null,'deleted=eq.false&order=updatedat.asc')
@@ -5787,7 +5954,7 @@ function supabaseLoadAll(callback){
       LS.set('invStockIn',JSON.stringify(invStockIn));
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load inventory failed:',e);done();});
 
   // Load settings
   sbFetch('settings','GET',null,null)
@@ -5813,7 +5980,7 @@ function supabaseLoadAll(callback){
       });
     }
     done();
-  }).catch(function(){done();});
+  }).catch(function(e){console.error('Load settings failed:',e);done();});
 }
 
 // ── Realtime subscriptions ──
@@ -6532,7 +6699,7 @@ function savePasswords(){
   }
 }
 
-function closeModal(id){var el=document.getElementById(id);if(el)el.remove();}
+function removeModalById(id){var el=document.getElementById(id);if(el)el.remove();}
 function openSyncSettings(){
   var old=document.getElementById('sync-modal');if(old)old.remove();
   var overlay=document.createElement('div');
@@ -6549,7 +6716,7 @@ function openSyncSettings(){
     +'<p id="last-backup-label" style="font-size:0.7rem;margin-bottom:4px">'+(lastBk?'✅ Last backup: '+lastBk:'No backup yet')+'</p>'
     +'<p style="font-size:0.7rem;color:#aaa;margin-bottom:16px">Auto backup runs daily at 11PM silently.</p>'
     +'<div style="text-align:right">'
-    +'<button onclick="closeModal(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Close</button>'
+    +'<button onclick="removeModalById(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Close</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
 }
