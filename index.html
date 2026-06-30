@@ -247,6 +247,51 @@ input, select, textarea{
     font-size:0.92rem !important;
     min-height:40px;
   }
+
+  /* Case Records tables: the table itself has an inline min-width:1000px
+     (and several header cells their own min-widths) which is wider than
+     a tablet screen, forcing horizontal scroll. Override with a fixed
+     layout sized in percentages that always sum to 100%, so the table
+     genuinely fits the viewport instead of spilling past it. Long text
+     columns wrap onto a second line instead of pushing the table wider. */
+  [id^="ctable-"]{overflow-x:hidden !important}
+  [id^="ctable-"] table{
+    width:100% !important;
+    min-width:0 !important;
+    table-layout:fixed !important;
+  }
+  [id^="ctable-"] th,[id^="ctable-"] td{
+    white-space:normal !important;
+    word-break:break-word;
+    min-width:0 !important;
+    padding:8px 6px !important;
+    font-size:0.74rem !important;
+  }
+  [id^="ctable-"] th:nth-child(1),[id^="ctable-"] td:nth-child(1){width:3%}
+  [id^="ctable-"] th:nth-child(2),[id^="ctable-"] td:nth-child(2){width:8%}
+  [id^="ctable-"] th:nth-child(3),[id^="ctable-"] td:nth-child(3){width:9%}
+  [id^="ctable-"] th:nth-child(4),[id^="ctable-"] td:nth-child(4){width:7%}
+  [id^="ctable-"] th:nth-child(5),[id^="ctable-"] td:nth-child(5){width:4%}
+  [id^="ctable-"] th:nth-child(6),[id^="ctable-"] td:nth-child(6){width:6%}
+  [id^="ctable-"] th:nth-child(7),[id^="ctable-"] td:nth-child(7){width:6%}
+  [id^="ctable-"] th:nth-child(8),[id^="ctable-"] td:nth-child(8){width:8%}
+  [id^="ctable-"] th:nth-child(9),[id^="ctable-"] td:nth-child(9){width:9%}
+  [id^="ctable-"] th:nth-child(10),[id^="ctable-"] td:nth-child(10){width:8%}
+  [id^="ctable-"] th:nth-child(11),[id^="ctable-"] td:nth-child(11){width:7%}
+  [id^="ctable-"] th:nth-child(12),[id^="ctable-"] td:nth-child(12){width:9%}
+  [id^="ctable-"] th:nth-child(13),[id^="ctable-"] td:nth-child(13){width:8%}
+  [id^="ctable-"] th:nth-child(14),[id^="ctable-"] td:nth-child(14){width:8%}
+  /* Action column buttons stack vertically now (see actionTd having no
+     white-space:nowrap), so they only need to fit one button's width at
+     a time, not two side by side - keep them reasonably tappable. */
+  [id^="ctable-"] .row-action-btn{
+    padding:8px 10px !important;
+    font-size:0.8rem !important;
+    min-height:32px;
+    display:block;
+    width:fit-content;
+    margin:2px 0 !important;
+  }
 }
 
 .form-panel{
@@ -1901,6 +1946,26 @@ function applyRoleAccess(role){
 function localDateStr(d){
   var dt=d||new Date();
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+
+function fixRecordDates(arr){
+  if(!Array.isArray(arr)) return arr;
+  return arr.map(function(r){
+    if(!r||typeof r!=='object') return r;
+    var d=r.date;
+    if(typeof d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(d)){
+      // Already a clean YYYY-MM-DD string - leave it exactly as is so a
+      // correctly-formatted date is never accidentally altered.
+      return r;
+    }
+    if(d){
+      var parsed=new Date(d);
+      if(!isNaN(parsed.getTime())){
+        r.date=localDateStr(parsed);
+      }
+    }
+    return r;
+  });
 }
 
 const LS = {
@@ -5223,7 +5288,7 @@ function renderCaseTable(caseType){
 
     // Action td - edit + delete only
     const actionTd=document.createElement('td');
-    actionTd.style.cssText=tdStyle+';white-space:nowrap;min-width:80px';
+    actionTd.style.cssText=tdStyle+';min-width:60px';
 
     const editBtn=document.createElement('button');
     editBtn.textContent='Edit';
