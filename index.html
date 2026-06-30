@@ -125,7 +125,7 @@ input, select, textarea{
 
 /* ══ MOBILE ══ */
 @media(max-width:768px){
-  .sidebar{display:none}
+  .sidebar{display:none !important}
   /* Hide desktop form panel on mobile */
   .form-panel{display:none !important}
 
@@ -175,10 +175,78 @@ input, select, textarea{
   .shell > div{padding-bottom:58px}
 }
 
-@media(min-width:769px){
+@media(min-width:1195px){
   .mobile-nav{display:none}
   .mobile-new-btn{display:none}
   .form-modal-overlay{display:none !important}
+}
+
+/* ══ TABLET (769px–1194px): structurally like phone (popup entry form,
+   bottom nav instead of sidebar) but every touch target sized up for a
+   bigger screen held at arm's length rather than in one hand. ══ */
+@media(min-width:769px) and (max-width:1194px){
+  .sidebar{display:none !important}
+  .form-panel{display:none !important}
+
+  #page-patients{flex-direction:column !important}
+  .records-panel{flex:1;min-height:0}
+  .top-bar{padding:14px 24px}
+  .top-bar-left h2{font-size:1.15rem}
+  .top-bar-left p{font-size:0.8rem}
+  .badge{padding:8px 16px;min-width:74px}
+  .badge-num{font-size:1.25rem}
+
+  .mobile-new-btn{
+    display:flex;
+    align-items:center;justify-content:center;gap:8px;
+    margin:16px 24px 0;
+    padding:16px;border:none;border-radius:10px;
+    background:#1f4e4a;color:#fff;
+    font-weight:700;font-size:1.05rem;
+    cursor:pointer;font-family:inherit;
+    width:calc(100% - 48px);flex-shrink:0;
+  }
+
+  .mobile-nav{
+    display:flex;
+    position:fixed;bottom:0;left:0;right:0;
+    background:#1a3d38;
+    border-top:1px solid rgba(255,255,255,0.1);
+    z-index:100;padding:10px 0 12px;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    justify-content:center;
+  }
+  .mobile-nav::-webkit-scrollbar{display:none}
+  .mobile-nav-item{
+    flex:0 0 96px;
+    display:flex;flex-direction:column;align-items:center;gap:5px;
+    cursor:pointer;padding:8px 4px;
+    color:rgba(255,255,255,0.45);font-size:0.74rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:0.05em;user-select:none;
+    white-space:nowrap;
+  }
+  .mobile-nav-item svg{width:26px;height:26px}
+  .mobile-nav-item.active{color:#e2b76a}
+  .mobile-nav-item.active svg{stroke:#e2b76a}
+  .shell > div{padding-bottom:74px}
+
+  /* Bigger inputs, buttons, and table action buttons for finger taps */
+  .f-input{padding:13px 14px;font-size:1rem;border-radius:9px}
+  .f-label{font-size:0.78rem}
+  .f-btn{padding:16px;font-size:1rem;border-radius:9px}
+  .nav-item{padding:13px 16px;font-size:1rem}
+  .nav-item svg{width:20px;height:20px}
+
+  /* Table row Edit/Del/Mark-Paid buttons are built with inline styles in
+     JS, so !important is needed here to win over them and actually grow
+     the tap target on tablet. */
+  .row-action-btn{
+    padding:10px 16px !important;
+    font-size:0.92rem !important;
+    min-height:40px;
+  }
 }
 
 .form-panel{
@@ -1984,10 +2052,15 @@ function saveMobileEntry(){
   if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
   var row={date,on,cas,price,doctor,ptname};
   if(editIdx>=0){
+    if(editKey){
+      var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
+      if(resolvedIdx>=0) editIdx=resolvedIdx;
+    }
     row._key=records[editIdx]._key||genId('rec');
     row.createdAt=records[editIdx].createdAt||Date.now();
     records[editIdx]=row;
     editIdx=-1;
+    editKey='';
   } else {
     row._key=genId('rec');
     row.createdAt=Date.now();
@@ -2039,6 +2112,7 @@ document.getElementById('f-date').valueAsDate=new Date();
 // Load saved records
 let records = JSON.parse(LS.get('dental-records') || '[]');
 let editIdx = -1;
+let editKey = '';
 
 function updateBadges(){
   var _td=new Date();const today=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
@@ -2059,10 +2133,15 @@ function saveEntry(){
   if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
   var row={date,on,cas,price,doctor,ptname};
   if(editIdx>=0){
+    if(editKey){
+      var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
+      if(resolvedIdx>=0) editIdx=resolvedIdx;
+    }
     row._key=records[editIdx]._key||genId('rec');
     row.createdAt=records[editIdx].createdAt||Date.now();
     records[editIdx]=row;
     editIdx=-1;
+    editKey='';
     document.getElementById('f-submit').textContent='+ Save Entry';
   } else {
     row._key=genId('rec');
@@ -2092,6 +2171,7 @@ function resetForm(){
 function editRec(i){
   const r=records[i];
   editIdx=i;
+  editKey=r._key||'';
 
   const isMobile = window.innerWidth <= 768;
 
@@ -2129,7 +2209,9 @@ function delRec(i){
   records.splice(i,1);
   LS.set('dental-records',JSON.stringify(records));
   appFullyLoaded=true;
-  if(editIdx===i){editIdx=-1;resetForm();document.getElementById('f-submit').textContent='+ Save Entry';}
+  if(rec&&rec._key&&editKey===rec._key){
+    editIdx=-1;editKey='';resetForm();document.getElementById('f-submit').textContent='+ Save Entry';
+  }
   render();updateBadges();
 }
 
@@ -2155,12 +2237,14 @@ function render(){
     const editBtn=document.createElement('button');
     editBtn.textContent='Edit';
     editBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#dff0eb;cursor:pointer;margin-right:3px;font-size:0.75rem';
+    editBtn.classList.add('row-action-btn');
     editBtn.setAttribute('data-idx',realIdx);
     editBtn.onclick=function(){editRec(parseInt(this.getAttribute('data-idx')));};
 
     const delBtn=document.createElement('button');
     delBtn.textContent='Del';
     delBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#fde4e2;cursor:pointer;font-size:0.75rem';
+    delBtn.classList.add('row-action-btn');
     delBtn.setAttribute('data-idx',realIdx);
     delBtn.onclick=function(){delRec(parseInt(this.getAttribute('data-idx')));};
 
@@ -2769,6 +2853,12 @@ let netYear=new Date().getFullYear();
 
 var expNames=JSON.parse(LS.get('expNames')||'null')||{salary:[],bills:[]};
 var expData=JSON.parse(LS.get('expData')||'null')||{salary:{},bills:{}};
+
+function saveExpData(){
+  LS.set('expNames',JSON.stringify(expNames));
+  LS.set('expData',JSON.stringify(expData));
+  saveAllSettings();
+}
 var expYear=new Date().getFullYear();
 
 function updateExpLabels(){
@@ -3169,12 +3259,14 @@ function renderInvStockIn(){
       const editBtn=document.createElement('button');
       editBtn.textContent='Edit';
       editBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#dff0eb;color:#1f4e4a;margin-right:3px';
+      editBtn.classList.add('row-action-btn');
       editBtn.setAttribute('data-idx',realIdx);
       editBtn.onclick=function(){openInvStockEdit(parseInt(this.getAttribute('data-idx')));};
 
       const delBtn=document.createElement('button');
       delBtn.textContent='Del';
       delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#fde4e2;color:#c0392b';
+      delBtn.classList.add('row-action-btn');
       delBtn.setAttribute('data-idx',realIdx);
       delBtn.onclick=function(){
         var idx=parseInt(this.getAttribute('data-idx'));
@@ -3294,6 +3386,7 @@ function addStockItemRow(){
   const delBtn=document.createElement('button');
   delBtn.innerHTML='✕';
   delBtn.style.cssText='position:absolute;top:8px;right:8px;background:#fde4e2;border:none;border-radius:50%;width:22px;height:22px;font-size:0.75rem;cursor:pointer;color:#c0392b;font-weight:700';
+  delBtn.classList.add('row-remove-circle-btn');
   delBtn.onclick=function(){row.remove();};
 
   // Category select
@@ -3419,6 +3512,7 @@ let invLedgerItems = JSON.parse(LS.get('invLedgerItems')||'null') || {dental:[],
 function saveInvLedger(){
   LS.set('invLedgerData', JSON.stringify(invLedgerData));
   LS.set('invLedgerItems', JSON.stringify(invLedgerItems));
+  saveAllSettings();
 }
 
 
@@ -3521,6 +3615,7 @@ function renderInvLedger(cat){
     const delBtn=document.createElement('button');
     delBtn.textContent='Del';
     delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.72rem;background:#fde4e2;color:#c0392b';
+    delBtn.classList.add('row-action-btn');
     delBtn.setAttribute('data-cat',cat);
     delBtn.setAttribute('data-item',item);
     delBtn.onclick=function(){
@@ -3666,10 +3761,12 @@ function renderLowStockAlerts(){
     const delBtn=document.createElement('button');
     delBtn.textContent='Del';
     delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#fde4e2;color:#c0392b';
+    delBtn.classList.add('row-action-btn');
     delBtn.setAttribute('data-idx',i);
     delBtn.onclick=function(){
       lowStockAlerts.splice(parseInt(this.getAttribute('data-idx')),1);
       LS.set('lowStockAlerts',JSON.stringify(lowStockAlerts));
+      autoSync();
       renderLowStockAlerts();renderLowStockTable();
     };
     const actionTd=document.createElement('td');
@@ -3976,12 +4073,14 @@ function renderPhIncome(){
       const editBtn=document.createElement('button');
       editBtn.textContent='Edit';
       editBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#dff0eb;color:#1f4e4a;margin-right:3px';
+      editBtn.classList.add('row-action-btn');
       editBtn.setAttribute('data-idx',realIdx);
       editBtn.onclick=function(){openPhIncEdit(parseInt(this.getAttribute('data-idx')));};
 
       const delBtn=document.createElement('button');
       delBtn.textContent='Del';
       delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#fde4e2;color:#c0392b';
+      delBtn.classList.add('row-action-btn');
       delBtn.setAttribute('data-idx',realIdx);
       delBtn.onclick=function(){
         var idx=parseInt(this.getAttribute('data-idx'));
@@ -4128,6 +4227,7 @@ function renderPhPurchase(){
           +(r.paidDate?'<span style="font-size:0.7rem;color:#7aaa9e;display:block;margin-top:3px">'+r.paidDate+'</span>':'');
         const unmarkBtn=document.createElement('button');
         unmarkBtn.style.cssText='margin-top:5px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.7rem;background:#f5f5f5;color:#888;display:block;width:100%';
+        unmarkBtn.classList.add('row-action-btn');
         unmarkBtn.textContent='Unmark';
         unmarkBtn.setAttribute('data-idx', String(realIdx));
         unmarkBtn.onclick=function(){
@@ -4135,12 +4235,14 @@ function renderPhPurchase(){
           pharmacyPurchase[i].status='unpaid';
           pharmacyPurchase[i].paidDate='';
           LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
+          fbSavePharmacyPurchase(pharmacyPurchase[i]);
           renderPhPurchase();
         };
         statusTd.appendChild(unmarkBtn);
       } else {
         const markBtn=document.createElement('button');
         markBtn.style.cssText='padding:4px 10px;border:none;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:700;background:#1f4e4a;color:#fff';
+        markBtn.classList.add('row-action-btn');
         markBtn.textContent='Mark Paid';
         markBtn.setAttribute('data-idx',realIdx);
         markBtn.onclick=function(){
@@ -4148,6 +4250,7 @@ function renderPhPurchase(){
           pharmacyPurchase[idx].status='paid';
           var _pd=new Date();pharmacyPurchase[idx].paidDate=_pd.getFullYear()+'-'+String(_pd.getMonth()+1).padStart(2,'0')+'-'+String(_pd.getDate()).padStart(2,'0');
           LS.set('pharmacyPurchase',JSON.stringify(pharmacyPurchase));
+          fbSavePharmacyPurchase(pharmacyPurchase[idx]);
           renderPhPurchase();
         };
         statusTd.appendChild(markBtn);
@@ -4156,6 +4259,7 @@ function renderPhPurchase(){
       // Del button only in action
       const delBtn=document.createElement('button');
       delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#fde4e2;color:#c0392b';
+      delBtn.classList.add('row-action-btn');
       delBtn.textContent='Del';
       delBtn.setAttribute('data-idx',realIdx);
       delBtn.onclick=function(){
@@ -4319,12 +4423,14 @@ function renderPhExpend(){
       const editBtn=document.createElement('button');
       editBtn.textContent='Edit';
       editBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#dff0eb;color:#1f4e4a;margin-right:3px';
+      editBtn.classList.add('row-action-btn');
       editBtn.setAttribute('data-idx',realIdx);
       editBtn.onclick=function(){openPhExpEdit(parseInt(this.getAttribute('data-idx')));};
 
       const delBtn=document.createElement('button');
       delBtn.textContent='Del';
       delBtn.style.cssText='padding:3px 8px;border:none;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:600;background:#fde4e2;color:#c0392b';
+      delBtn.classList.add('row-action-btn');
       delBtn.setAttribute('data-idx',realIdx);
       delBtn.onclick=function(){
         var idx=parseInt(this.getAttribute('data-idx'));
@@ -4627,11 +4733,15 @@ function openCaseModal(){
   ['cf-name','cf-age','cf-address','cf-phone','cf-total','cf-deposit'].forEach(id=>document.getElementById(id).value='');
   ['cf-sex','cf-newold'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-remaining').style.display='none';
+  document.getElementById('cf-save-btn').textContent='+ Save Entry';
+  document.getElementById('cf-save-btn').removeAttribute('data-editing');
+  document.getElementById('cf-save-btn').removeAttribute('data-editing-key');
 }
 function closeCaseModalBtn(){
   document.getElementById('case-modal-overlay').style.display='none';
   document.getElementById('cf-save-btn').textContent='+ Save Entry';
   document.getElementById('cf-save-btn').removeAttribute('data-editing');
+  document.getElementById('cf-save-btn').removeAttribute('data-editing-key');
 }
 function closeCaseModal(e){if(e.target===document.getElementById('case-modal-overlay'))closeCaseModalBtn();}
 
@@ -4714,8 +4824,10 @@ function saveCaseEntry(){
   const newold=document.getElementById('cf-newold').value;
   if(!caseType||!treat||!name||!newold){alert('Please fill Case, Treatment, Pt Name and New/Old');return;}
 
-  const editingUid=document.getElementById('cf-save-btn').getAttribute('data-editing')||'';
-  const rec={
+  const editingType=document.getElementById('cf-save-btn').getAttribute('data-editing')||'';
+  const editingKey=document.getElementById('cf-save-btn').getAttribute('data-editing-key')||'';
+
+  const fields={
     date:document.getElementById('cf-date').value,
     treat, name,
     age:document.getElementById('cf-age').value,
@@ -4725,9 +4837,29 @@ function saveCaseEntry(){
     phone:document.getElementById('cf-phone').value.trim(),
     drname:document.getElementById('cf-drname').value,
     total:document.getElementById('cf-total').value,
-    drnote:document.getElementById('cf-drnote').value.trim(),
-    depositLog:[]
+    drnote:document.getElementById('cf-drnote').value.trim()
   };
+
+  if(editingType){
+    // Editing an existing case record — update it in place, keep its
+    // original _key, createdAt, depositLog, done/doneDate so we don't
+    // create a duplicate row or lose payment history.
+    const idx=findCaseRecIdxByKey(editingType, editingKey);
+    if(idx<0){alert('Could not find the record to update — it may have been deleted. Please close and try again.');return;}
+    const existing=caseRecords[editingType][idx];
+    Object.assign(existing, fields);
+    existing.updatedAt=Date.now();
+    LS.set('caseRecords',JSON.stringify(caseRecords));
+    fbSaveCaseRecord(editingType, existing);
+    render();
+    updateBadges();
+    renderCaseTable(editingType);
+    switchCaseTab(editingType, document.getElementById('ctab-'+editingType));
+    closeCaseModalBtn();
+    return;
+  }
+
+  const rec={...fields, depositLog:[]};
 
   // If initial deposit entered, add to depositLog and DailyRecords
   const initDeposit=document.getElementById('cf-deposit').value;
@@ -4860,6 +4992,7 @@ function renderCaseTable(caseType){
     const editBtn=document.createElement('button');
     editBtn.textContent='Edit';
     editBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#dff0eb;cursor:pointer;margin-right:3px;font-size:0.75rem';
+    editBtn.classList.add('row-action-btn');
     editBtn.setAttribute('data-ct',caseType);
     editBtn.setAttribute('data-idx',i);
     editBtn.onclick=function(){editCaseRec(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-idx')));};
@@ -4867,6 +5000,7 @@ function renderCaseTable(caseType){
     const delBtn=document.createElement('button');
     delBtn.textContent='Del';
     delBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#fde4e2;cursor:pointer;font-size:0.75rem';
+    delBtn.classList.add('row-action-btn');
     delBtn.setAttribute('data-ct',caseType);
     delBtn.setAttribute('data-idx',i);
     delBtn.onclick=function(){delCaseRec(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-idx')));};
@@ -5228,6 +5362,7 @@ function delCaseRec(caseType,i){
 
 function editCaseRec(caseType,i){
   const r=caseRecords[caseType][i];
+  if(!r._key){ r._key=genId('case'); LS.set('caseRecords',JSON.stringify(caseRecords)); }
   openCaseModal();
   document.getElementById('cf-date').value=r.date||'';
   document.getElementById('cf-case').value=caseType;
@@ -5244,9 +5379,13 @@ function editCaseRec(caseType,i){
   document.getElementById('cf-deposit').value=r.deposit||'';
   document.getElementById('cf-drnote').value=r.drnote||'';
   calcRemaining();
-  caseRecords[caseType].splice(i,1);
+  // Do NOT remove the record from memory here — only saveCaseEntry should
+  // mutate it, and only once the user actually confirms the edit. Removing
+  // it here meant closing the modal without saving (or any re-render in
+  // between) would lose the record entirely.
   document.getElementById('cf-save-btn').textContent='✓ Update Entry';
   document.getElementById('cf-save-btn').setAttribute('data-editing',caseType);
+  document.getElementById('cf-save-btn').setAttribute('data-editing-key',r._key||'');
 }
 
 // Case year navigation and filter
@@ -5719,7 +5858,8 @@ function fbDeleteRecord(rec){
   if(!rec._key) return;
   markOwnWrite(rec._key);
   sbFetch('records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
-  .catch(function(){});
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function fbSaveCaseRecord(caseType,rec){
@@ -5740,10 +5880,16 @@ function fbSaveCaseRecord(caseType,rec){
 }
 
 function fbDeleteCaseRecord(caseType,rec){
-  if(!rec._key) return;
+  if(!rec._key){
+    // Legacy record created before the _key system existed — it was never
+    // saved to Supabase under any id, so there's nothing there to delete.
+    // Nothing to do remotely; the caller still removes it locally.
+    return;
+  }
   markOwnWrite(rec._key);
   sbFetch('case_records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
-  .catch(function(){});
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function fbSavePharmacyIncome(rec){
@@ -5755,7 +5901,9 @@ function fbSavePharmacyIncome(rec){
 }
 function fbDeletePharmacyIncome(rec){
   if(!rec._key) return;
-  sbFetch('pharmacy_income','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
+  sbFetch('pharmacy_income','PATCH',{deleted:true},'id=eq.'+rec._key)
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function fbSavePharmacyPurchase(rec){
@@ -5767,7 +5915,9 @@ function fbSavePharmacyPurchase(rec){
 }
 function fbDeletePharmacyPurchase(rec){
   if(!rec._key) return;
-  sbFetch('pharmacy_purchase','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
+  sbFetch('pharmacy_purchase','PATCH',{deleted:true},'id=eq.'+rec._key)
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function fbSavePharmacyExpend(rec){
@@ -5779,7 +5929,9 @@ function fbSavePharmacyExpend(rec){
 }
 function fbDeletePharmacyExpend(rec){
   if(!rec._key) return;
-  sbFetch('pharmacy_expend','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
+  sbFetch('pharmacy_expend','PATCH',{deleted:true},'id=eq.'+rec._key)
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function fbSaveInvStockIn(rec){
@@ -5791,7 +5943,9 @@ function fbSaveInvStockIn(rec){
 }
 function fbDeleteInvStockIn(rec){
   if(!rec._key) return;
-  sbFetch('inv_stock_in','PATCH',{deleted:true},'id=eq.'+rec._key).catch(function(){});
+  sbFetch('inv_stock_in','PATCH',{deleted:true},'id=eq.'+rec._key)
+  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
 function autoSync(){
