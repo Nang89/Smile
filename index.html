@@ -276,6 +276,11 @@ input, select, textarea{
 }
 .f-input:focus{border-color:#1f4e4a;background-color:#ffffff}
 .f-input::placeholder{color:#aac8c2}
+.f-input[type="date"]{position:relative}
+.f-input[type="date"]::-webkit-calendar-picker-indicator{
+  position:absolute;left:0;top:0;width:100%;height:100%;
+  margin:0;padding:0;cursor:pointer;color:transparent;background:transparent;
+}
 .f-btn{
   margin:0 18px 18px;padding:11px;border:none;border-radius:7px;
   background:linear-gradient(135deg,#e2b76a,#b88a3e);
@@ -386,37 +391,41 @@ input, select, textarea{
 <body>
 
 <!-- ══ LOGIN SCREEN ══ -->
-<div id="login-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#1f4e4a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
+<div id="login-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#E5F5E0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
 
-  <!-- Logo -->
-  <div id="login-logo" onclick="secretTap()" style="margin-bottom:12px;cursor:pointer;user-select:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" width="60" height="60">
-      <path d="M12 5.5c-2-1.5-5-1.5-6.5 0C3 8 4 12 5 14.5S6 20 8 20c1.5 0 1.5-3 4-3s2.5 3 4 3c2 0 2-3 3-5.5S21 8 18.5 5.5C17 4 14 4 12 5.5z"/>
-    </svg>
-  </div>
-  <h1 style="color:#fff;font-size:1.5rem;font-weight:800;margin-bottom:4px">Smile Dental Clinic</h1>
-  <p style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:32px">Enter your password to continue</p>
+  <div style="background:#ffffff;border-radius:22px;padding:40px 32px;width:100%;max-width:360px;display:flex;flex-direction:column;align-items:center;box-shadow:0 12px 32px rgba(31,78,74,0.1)">
 
-  <!-- Password input only -->
-  <div style="width:100%;max-width:320px">
-    <div style="position:relative;margin-bottom:12px">
-      <input id="login-password-input" type="password" placeholder="Password"
-        style="width:100%;padding:14px 48px 14px 16px;border:none;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;font-size:1rem;font-family:inherit;outline:none;box-sizing:border-box;caret-color:#fff"
-        onkeydown="if(event.key==='Enter') tryPasswordLogin()"/>
-      <button onclick="togglePasswordVis()" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:1.1rem" id="pw-vis-btn">👁</button>
+    <!-- Logo -->
+    <div id="login-logo" onclick="secretTap()" style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#e2b76a,#b88a3e);display:flex;align-items:center;justify-content:center;margin-bottom:18px;cursor:pointer;user-select:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3a2a10" stroke-width="1.6" width="28" height="28">
+        <path d="M12 5.5c-2-1.5-5-1.5-6.5 0C3 8 4 12 5 14.5S6 20 8 20c1.5 0 1.5-3 4-3s2.5 3 4 3c2 0 2-3 3-5.5S21 8 18.5 5.5C17 4 14 4 12 5.5z"/>
+      </svg>
     </div>
-    <button onclick="tryPasswordLogin()"
-      style="width:100%;padding:14px;border:none;border-radius:12px;background:#27ae60;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit">
-      Unlock
-    </button>
-    <p style="color:rgba(255,255,255,0.4);font-size:0.75rem;text-align:center;margin-top:12px">Admin or Staff password accepted</p>
-    <div id="pin-error" style="color:#ff8a80;font-size:0.82rem;text-align:center;margin-top:8px;display:none">Wrong password. Try again.</div>
+    <h1 style="color:#1f4e4a;font-size:1.3rem;font-weight:600;margin-bottom:4px;font-family:Georgia,serif">Welcome back</h1>
+    <p style="color:#5a8a82;font-size:0.82rem;margin-bottom:28px;text-align:center">Smile Dental Clinic — enter your password</p>
+
+    <!-- Password input only -->
+    <div style="width:100%">
+      <div style="position:relative;margin-bottom:12px">
+        <input id="login-password-input" type="password" placeholder="Password"
+          style="width:100%;padding:13px 48px 13px 16px;border:1px solid #cce0da;border-radius:11px;background:#E5F5E0;color:#1c2c2e;font-size:1rem;font-family:inherit;outline:none;box-sizing:border-box;caret-color:#1f4e4a"
+          onkeydown="if(event.key==='Enter') tryPasswordLogin()"/>
+        <button onclick="togglePasswordVis()" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#7aaa9e;font-size:1.1rem" id="pw-vis-btn">👁</button>
+      </div>
+      <button onclick="tryPasswordLogin()"
+        style="width:100%;padding:13px;border:none;border-radius:11px;background:#1f4e4a;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit">
+        Unlock
+      </button>
+      <p style="color:#9ab8b1;font-size:0.75rem;text-align:center;margin-top:14px">Admin or Staff password accepted</p>
+      <div id="pin-error" style="color:#c0392b;font-size:0.82rem;text-align:center;margin-top:8px;display:none">Wrong password. Try again.</div>
+    </div>
+
   </div>
 
 </div>
 
 <style>
-#login-password-input::placeholder{color:rgba(255,255,255,0.4);}
+#login-password-input::placeholder{color:#9ab8b1;}
 </style>
 
 <div class="shell">
@@ -523,12 +532,21 @@ input, select, textarea{
               <input class="f-input" type="date" id="f-date"/>
             </div>
             <div class="f-group">
+              <label class="f-label">Sex</label>
+              <div class="f-pill-group" id="f-sex-pills">
+                <div class="f-pill" data-value="Male" onclick="selectPill('f-sex-pills','f-sex','Male',this)">Male</div>
+                <div class="f-pill" data-value="Female" onclick="selectPill('f-sex-pills','f-sex','Female',this)">Female</div>
+                <div class="f-pill" data-value="Other" onclick="selectPill('f-sex-pills','f-sex','Other',this)">Other</div>
+              </div>
+              <input type="hidden" id="f-sex"/>
+            </div>
+            <div class="f-group">
               <label class="f-label">Old / New <span class="f-req">*</span></label>
-              <select class="f-input" id="f-oldnew">
-                <option value="">— Select —</option>
-                <option>New</option>
-                <option>Old</option>
-              </select>
+              <div class="f-pill-group" id="f-oldnew-pills">
+                <div class="f-pill" data-value="New" onclick="selectPill('f-oldnew-pills','f-oldnew','New',this)">New</div>
+                <div class="f-pill" data-value="Old" onclick="selectPill('f-oldnew-pills','f-oldnew','Old',this)">Old</div>
+              </div>
+              <input type="hidden" id="f-oldnew"/>
             </div>
             <div class="f-group">
               <label class="f-label">Case <span class="f-req">*</span></label>
@@ -1607,13 +1625,14 @@ input, select, textarea{
         </div>
       </div>
 
-      <!-- Total Amount + Deposit -->
-      <div class="f-row2">
+      <!-- Total Amount + Deposit (deposit only shown when creating a new case;
+           editing an existing case uses the separate Add Payment popup instead) -->
+      <div class="f-row2" id="cf-total-deposit-row">
         <div class="f-group">
           <label class="f-label">Total Amount</label>
           <input class="f-input" type="number" id="cf-total" placeholder="e.g. 5000" min="0" oninput="calcRemaining()"/>
         </div>
-        <div class="f-group">
+        <div class="f-group" id="cf-deposit-group">
           <label class="f-label">Deposit</label>
           <input class="f-input" type="number" id="cf-deposit" placeholder="e.g. 2000" min="0" oninput="calcRemaining()"/>
         </div>
@@ -1693,12 +1712,21 @@ input, select, textarea{
           <input class="f-input" type="date" id="mf-date"/>
         </div>
       <div class="f-group">
+        <label class="f-label">Sex</label>
+        <div class="f-pill-group" id="mf-sex-pills">
+          <div class="f-pill" data-value="Male" onclick="selectPill('mf-sex-pills','mf-sex','Male',this)">Male</div>
+          <div class="f-pill" data-value="Female" onclick="selectPill('mf-sex-pills','mf-sex','Female',this)">Female</div>
+          <div class="f-pill" data-value="Other" onclick="selectPill('mf-sex-pills','mf-sex','Other',this)">Other</div>
+        </div>
+        <input type="hidden" id="mf-sex"/>
+      </div>
+      <div class="f-group">
         <label class="f-label">Old / New <span class="f-req">*</span></label>
-        <select class="f-input" id="mf-oldnew">
-          <option value="">— Select —</option>
-          <option>New</option>
-          <option>Old</option>
-        </select>
+        <div class="f-pill-group" id="mf-oldnew-pills">
+          <div class="f-pill" data-value="New" onclick="selectPill('mf-oldnew-pills','mf-oldnew','New',this)">New</div>
+          <div class="f-pill" data-value="Old" onclick="selectPill('mf-oldnew-pills','mf-oldnew','Old',this)">Old</div>
+        </div>
+        <input type="hidden" id="mf-oldnew"/>
       </div>
       <div class="f-group">
         <label class="f-label">Case <span class="f-req">*</span></label>
@@ -1812,11 +1840,8 @@ function doLogin(role){
 function logout(){
   currentRole=null;selectedRole=null;pinEntry='';
   document.getElementById('login-screen').style.display='flex';
-  document.getElementById('login-roles').style.display='flex';
-  document.getElementById('login-pin-section').style.display='none';
-  var adminBtn=document.getElementById('admin-role-btn');
-  if(adminBtn) adminBtn.style.display='none';
-  updatePinDots();
+  var inp=document.getElementById('login-password-input');
+  if(inp) inp.value='';
 }
 function applyRoleAccess(role){
   // Define which pages each role can access
@@ -2056,6 +2081,7 @@ function closeFormModal(e){
 function saveMobileEntry(){
   const date = document.getElementById('mf-date').value;
   const on   = document.getElementById('mf-oldnew').value;
+  const sex  = document.getElementById('mf-sex').value;
   const caseSel=document.getElementById('mf-case-select').value;
   const cas=caseSel==='__add__'?document.getElementById('mf-case-custom').value.trim():caseSel;
   const price=document.getElementById('mf-price').value;
@@ -2063,7 +2089,7 @@ function saveMobileEntry(){
   const doctor=drSel==='__add__'?document.getElementById('mf-doctor-custom').value.trim():drSel;
   const ptname= document.getElementById('mf-remark').value.trim();
   if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
-  var row={date,on,cas,price,doctor,ptname};
+  var row={date,on,sex,cas,price,doctor,ptname};
   if(editIdx>=0){
     if(editKey){
       var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
@@ -2083,7 +2109,8 @@ function saveMobileEntry(){
   LS.set('dental-records',JSON.stringify(records));
   fbSaveRecord(row);
   ['mf-price','mf-remark','mf-case-custom','mf-doctor-custom'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('mf-oldnew').value='';
+  setPillValue('mf-oldnew-pills','mf-oldnew','');
+  setPillValue('mf-sex-pills','mf-sex','');
   document.getElementById('mf-case-select').value='';
   document.getElementById('mf-doctor-select').value='';
   document.getElementById('mf-case-custom').style.display='none';
@@ -2137,6 +2164,7 @@ function updateBadges(){
 function saveEntry(){
   const date=document.getElementById('f-date').value;
   const on=document.getElementById('f-oldnew').value;
+  const sex=document.getElementById('f-sex').value;
   const caseSel=document.getElementById('f-case-select').value;
   const cas=caseSel==='__add__'?document.getElementById('f-case-custom').value.trim():caseSel;
   const price=document.getElementById('f-price').value;
@@ -2144,7 +2172,7 @@ function saveEntry(){
   const doctor=drSel==='__add__'?document.getElementById('f-doctor-custom').value.trim():drSel;
   const ptname=document.getElementById('f-remark').value.trim();
   if(!date||!on||!cas){alert('Please fill all required fields (*)');return;}
-  var row={date,on,cas,price,doctor,ptname};
+  var row={date,on,sex,cas,price,doctor,ptname};
   if(editIdx>=0){
     if(editKey){
       var resolvedIdx=records.findIndex(function(r){return r._key===editKey;});
@@ -2174,7 +2202,8 @@ function resetForm(){
   const d=String(viewDate.getDate()).padStart(2,'0');
   document.getElementById('f-date').value=y+'-'+m+'-'+d;
   ['f-price','f-remark','f-case-custom','f-doctor-custom'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-oldnew').value='';
+  setPillValue('f-oldnew-pills','f-oldnew','');
+  setPillValue('f-sex-pills','f-sex','');
   document.getElementById('f-case-select').value='';
   document.getElementById('f-doctor-select').value='';
   document.getElementById('f-case-custom').style.display='none';
@@ -2192,7 +2221,8 @@ function editRec(i){
     // Open mobile modal and fill mf- fields
     openModal();
     document.getElementById('mf-date').value=r.date;
-    document.getElementById('mf-oldnew').value=r.on;
+    setPillValue('mf-sex-pills','mf-sex',r.sex||'');
+    setPillValue('mf-oldnew-pills','mf-oldnew',r.on||'');
     document.getElementById('mf-case-select').value=r.cas;
     document.getElementById('mf-price').value=r.price;
     document.getElementById('mf-doctor-select').value=r.doctor||'';
@@ -2205,7 +2235,8 @@ function editRec(i){
   } else {
     // Fill desktop f- fields
     document.getElementById('f-date').value=r.date;
-    document.getElementById('f-oldnew').value=r.on;
+    setPillValue('f-sex-pills','f-sex',r.sex||'');
+    setPillValue('f-oldnew-pills','f-oldnew',r.on||'');
     document.getElementById('f-case-select').value=r.cas;
     document.getElementById('f-price').value=r.price;
     document.getElementById('f-doctor-select').value=r.doctor||'';
@@ -4747,6 +4778,8 @@ function openCaseModal(){
   setPillValue('cf-sex-pills','cf-sex','');
   setPillValue('cf-newold-pills','cf-newold','');
   document.getElementById('cf-remaining').style.display='none';
+  document.getElementById('cf-deposit-group').style.display='';
+  document.getElementById('cf-total-deposit-row').style.gridTemplateColumns='';
   document.getElementById('cf-save-btn').textContent='+ Save Entry';
   document.getElementById('cf-save-btn').removeAttribute('data-editing');
   document.getElementById('cf-save-btn').removeAttribute('data-editing-key');
@@ -4839,10 +4872,12 @@ function setPillValue(groupId, hiddenInputId, value){
 }
 
 function calcRemaining(){
+  const isEditing=!!(document.getElementById('cf-save-btn').getAttribute('data-editing'));
+  const el=document.getElementById('cf-remaining');
+  if(isEditing){ el.style.display='none'; return; }
   const total=Number(document.getElementById('cf-total').value)||0;
   const deposit=Number(document.getElementById('cf-deposit').value)||0;
   const rem=total-deposit;
-  const el=document.getElementById('cf-remaining');
   if(total>0){
     el.style.display='block';
     document.getElementById('cf-remaining-val').textContent=rem.toLocaleString();
@@ -5230,8 +5265,13 @@ function openPaymentPopup(caseType, recIdx, recKey){
   var hdrRight=document.createElement('div');
   hdrRight.style.cssText='display:flex;gap:12px;align-items:center';
   var remSpan=document.createElement('span');
-  remSpan.style.cssText='color:#a8dbb8;font-size:0.8rem';
-  remSpan.innerHTML='Remaining: <strong style="color:#fff">'+'\u00a5'+remaining.toLocaleString()+'</strong>';
+  if(remaining<=0&&totalAmt>0){
+    remSpan.style.cssText='background:#1d9e75;color:#fff;font-size:0.74rem;font-weight:700;padding:4px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em';
+    remSpan.textContent='Paid';
+  } else {
+    remSpan.style.cssText='color:#a8dbb8;font-size:0.8rem';
+    remSpan.innerHTML='Remaining: <strong style="color:#fff">'+'\u00a5'+remaining.toLocaleString()+'</strong>';
+  }
   var closeBtn=document.createElement('button');
   closeBtn.textContent='X';
   closeBtn.style.cssText='background:rgba(255,255,255,0.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.85rem;font-weight:700';
@@ -5293,12 +5333,39 @@ function openPaymentPopup(caseType, recIdx, recKey){
   inputRow.appendChild(amtNoteRow);
   inputRow.appendChild(addBtn);
 
+  // Second row — independent of the payment row above: marking a case
+  // done/undone is a separate fact from logging a payment, so it gets its
+  // own date and its own button rather than being tied to the Add action.
+  var isDoneNow=(r.done===true||r.done==='true');
+  var doneSection=document.createElement('div');
+  doneSection.style.cssText='padding:14px 18px;background:#fff;border-top:1px solid #e0eeea;display:flex;gap:8px;align-items:center';
+  var doneDateInput=document.createElement('input');
+  doneDateInput.id='pay-done-date';
+  doneDateInput.type='date';
+  doneDateInput.className='f-input';
+  doneDateInput.style.cssText='flex:1;min-width:0';
+  var doneToggleBtn=document.createElement('button');
+  doneToggleBtn.textContent=isDoneNow?'Mark as Undone':'Mark as Done';
+  doneToggleBtn.style.cssText='padding:12px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.88rem;white-space:nowrap;'+(isDoneNow?'background:#fde4e2;color:#c0392b':'background:#1f4e4a;color:#fff');
+  doneToggleBtn.setAttribute('data-ct',caseType);
+  doneToggleBtn.setAttribute('data-rec',recIdx);
+  doneToggleBtn.setAttribute('data-key',recKey);
+  doneToggleBtn.onclick=function(){toggleDoneFromPaymentPopup(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')),this.getAttribute('data-key'));};
+  doneSection.appendChild(doneDateInput);
+  doneSection.appendChild(doneToggleBtn);
+
   box.appendChild(hdr);
   box.appendChild(tbl);
   box.appendChild(inputRow);
+  box.appendChild(doneSection);
   popup.appendChild(box);
   document.body.appendChild(popup);
   document.getElementById('pay-date').valueAsDate=new Date();
+  if(isDoneNow&&r.doneDate){
+    document.getElementById('pay-done-date').value=r.doneDate;
+  } else {
+    document.getElementById('pay-done-date').valueAsDate=new Date();
+  }
 }
 
 function addPaymentEntry(caseType,recIdx,recKey){
@@ -5341,6 +5408,31 @@ function addPaymentEntry(caseType,recIdx,recKey){
 
   document.getElementById('payment-popup').remove();
   renderCaseTable(caseType);
+  openPaymentPopup(caseType,recIdx,recKey);
+}
+
+function toggleDoneFromPaymentPopup(caseType,recIdx,recKey){
+  if(recKey){
+    var foundIdx=findCaseRecIdxByKey(caseType, recKey);
+    if(foundIdx>=0) recIdx=foundIdx;
+  }
+  var cr=caseRecords[caseType][recIdx];
+  if(!cr) return;
+  var nowDone=(cr.done===true||cr.done==='true');
+  if(nowDone){
+    cr.done=false;
+    cr.doneDate='';
+  } else {
+    var d=document.getElementById('pay-done-date').value;
+    cr.done=true;
+    cr.doneDate=d;
+  }
+  cr.updatedAt=Date.now();
+  recKey=cr._key;
+  LS.set('caseRecords',JSON.stringify(caseRecords));
+  fbSaveCaseRecord(caseType,cr);
+  renderCaseTable(caseType);
+  document.getElementById('payment-popup').remove();
   openPaymentPopup(caseType,recIdx,recKey);
 }
 
@@ -5418,9 +5510,16 @@ function editCaseRec(caseType,i){
   document.getElementById('cf-phone').value=r.phone||'';
   document.getElementById('cf-drname').value=r.drname||'';
   document.getElementById('cf-total').value=r.total||'';
-  document.getElementById('cf-deposit').value=r.deposit||'';
   document.getElementById('cf-drnote').value=r.drnote||'';
   calcRemaining();
+  // Deposit only makes sense when creating a new case (the first payment).
+  // For an existing case, adding money goes through the separate Add
+  // Payment popup, which correctly logs date/amount/note and updates
+  // depositLog — so hide this field entirely while editing rather than
+  // leave it sitting there doing nothing if someone types into it.
+  document.getElementById('cf-deposit-group').style.display='none';
+  document.getElementById('cf-total-deposit-row').style.gridTemplateColumns='1fr';
+  document.getElementById('cf-remaining').style.display='none';
   // Do NOT remove the record from memory here — only saveCaseEntry should
   // mutate it, and only once the user actually confirms the edit. Removing
   // it here meant closing the modal without saving (or any re-render in
@@ -5602,7 +5701,7 @@ function supabaseLoadAll(callback){
   .then(function(d){
     if(Array.isArray(d)){
       records=fixRecordDates(d.map(function(r){
-        return {date:r.date,on:r.on_,cas:r.cas,price:r.price,doctor:r.doctor,
+        return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,doctor:r.doctor,
                 ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                 createdAt:r.createdat,updatedAt:r.updatedat};
       }));
@@ -5784,7 +5883,7 @@ function applyRealtimeChange(tbl, changeType, newRow, oldRow){
       if(newRow.deleted){
         records=records.filter(function(r){return r._key!==newRow.id;});
       } else {
-        var mapped={date:newRow.date,on:newRow.on_,cas:newRow.cas,price:newRow.price,
+        var mapped={date:newRow.date,on:newRow.on_,sex:newRow.sex,cas:newRow.cas,price:newRow.price,
                     doctor:newRow.doctor,ptname:newRow.ptname,fromCase:newRow.fromcase,
                     _key:newRow.id,createdAt:newRow.createdat,updatedAt:newRow.updatedat};
         var idx=records.findIndex(function(r){return r._key===newRow.id;});
@@ -5833,7 +5932,7 @@ function supabaseReloadTable(tbl){
     .then(function(d){
       if(Array.isArray(d)){
         records=fixRecordDates(d.map(function(r){
-          return {date:r.date,on:r.on_,cas:r.cas,price:r.price,doctor:r.doctor,
+          return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,doctor:r.doctor,
                   ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                   createdAt:r.createdat,updatedAt:r.updatedat};
         }));
@@ -5887,7 +5986,7 @@ function fbSaveRecord(rec){
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
   markOwnWrite(rec._key);
-  var row={id:rec._key,date:rec.date,on_:rec.on,cas:rec.cas,price:rec.price,
+  var row={id:rec._key,date:rec.date,on_:rec.on,sex:rec.sex,cas:rec.cas,price:rec.price,
             doctor:rec.doctor,ptname:rec.ptname,fromcase:rec.fromCase||false,
             createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
   sbFetch('records','POST',[row],'on_conflict=id')
@@ -6017,7 +6116,7 @@ function firebasePush(){
   showSyncStatus('Pushing all data...','#e67e22');
   // Push all records
   var recs=records.map(function(r){
-    return {id:r._key||genId('rec'),date:r.date,on_:r.on,cas:r.cas,price:r.price,
+    return {id:r._key||genId('rec'),date:r.date,on_:r.on,sex:r.sex,cas:r.cas,price:r.price,
              doctor:r.doctor,ptname:r.ptname,fromcase:r.fromCase||false,
              createdat:r.createdAt||Date.now(),updatedat:Date.now(),deleted:false};
   });
@@ -6506,7 +6605,7 @@ function backupToSheets(silent,retryCount){
 
     // Convert records for backup
     var dailyRecords=sbRecords.map(function(r){
-      return {date:r.date,on:r.on_,cas:r.cas,price:r.price,
+      return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,
               doctor:r.doctor,ptname:r.ptname,fromcase:r.fromcase};
     });
 
