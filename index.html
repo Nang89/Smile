@@ -284,6 +284,19 @@ input, select, textarea{
 }
 .f-btn:hover{opacity:0.88}
 
+/* ── Tap-to-select pill group (replaces native <select> for short,
+   single-choice fields like Sex and New/Old) ── */
+.f-pill-group{display:flex;gap:8px}
+.f-pill{
+  flex:1;padding:8px 6px;border-radius:6px;text-align:center;
+  border:1.5px solid #cce0da;background-color:#E5F5E0;
+  font-size:0.82rem;font-family:inherit;color:#1c2c2e;font-weight:600;
+  cursor:pointer;user-select:none;transition:0.15s;
+}
+.f-pill.active{
+  background-color:#1f4e4a;border-color:#1f4e4a;color:#fff;
+}
+
 .table-area{
   flex:1;display:flex;flex-direction:column;
   min-width:0;overflow:hidden;
@@ -1522,106 +1535,106 @@ input, select, textarea{
     <!-- Form -->
     <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
 
-      <!-- 0. Date -->
+      <!-- Date -->
       <div class="f-group">
         <label class="f-label">Date <span class="f-req">*</span></label>
         <input class="f-input" type="date" id="cf-date"/>
       </div>
 
-      <!-- 1. Case -->
-      <div class="f-group">
-        <label class="f-label">Case <span class="f-req">*</span></label>
-        <select class="f-input" id="cf-case" onchange="updateTreatmentList()">
-          <option value="">— Select —</option>
-          <option value="fixed">Fixed</option>
-          <option value="removable">Removable</option>
-          <option value="implant">Implant</option>
-          <option value="ortho">Ortho</option>
-        </select>
-      </div>
-
-      <!-- 2. Treatment -->
-      <div class="f-group">
-        <label class="f-label">Treatment <span class="f-req">*</span></label>
-        <select class="f-input" id="cf-treatment" onchange="handleTreatmentChange()">
-          <option value="">— Select Case first —</option>
-        </select>
-        <input class="f-input" type="text" id="cf-treatment-custom" placeholder="Type treatment..." style="margin-top:5px;display:none"/>
-      </div>
-
-      <!-- 3. Pt Name -->
-      <div class="f-group">
-        <label class="f-label">Pt Name <span class="f-req">*</span></label>
-        <input class="f-input" type="text" id="cf-name" placeholder="Patient name"/>
-      </div>
-
-      <!-- 4. Age -->
-      <div class="f-group">
-        <label class="f-label">Age</label>
-        <input class="f-input" type="number" id="cf-age" placeholder="e.g. 32" min="0"/>
-      </div>
-
-      <!-- 5. Sex -->
-      <div class="f-group">
-        <label class="f-label">Sex</label>
-        <select class="f-input" id="cf-sex">
-          <option value="">— Select —</option>
-          <option>Male</option>
-          <option>Female</option>
-          <option>Other</option>
-        </select>
-      </div>
-
-      <!-- 6. New/Old -->
-      <div class="f-group">
-        <label class="f-label">New / Old <span class="f-req">*</span></label>
-        <select class="f-input" id="cf-newold">
-          <option value="">— Select —</option>
-          <option>New</option>
-          <option>Old</option>
-        </select>
-      </div>
-
-      <!-- 7. Address -->
-      <div class="f-group">
-        <label class="f-label">Address</label>
-        <input class="f-input" type="text" id="cf-address" placeholder="Patient address"/>
-      </div>
-
-      <!-- 8. Phone No -->
-      <div class="f-group">
-        <label class="f-label">Phone No.</label>
-        <input class="f-input" type="tel" id="cf-phone" placeholder="e.g. 0812345678"/>
-      </div>
-
-      <!-- 8b. Dr. Name -->
-      <div class="f-group">
-        <label class="f-label">Dr. Name</label>
-        <select class="f-input" id="cf-drname" onchange="handleCaseDrChange()">
-          <option value="">— Select —</option>
-        </select>
-        <input class="f-input" type="text" id="cf-drname-custom" placeholder="Type doctor name..." style="margin-top:5px;display:none"/>
-      </div>
-
-      <!-- 9. Total Amount -->
-      <div class="f-group">
-        <label class="f-label">Total Amount</label>
-        <input class="f-input" type="number" id="cf-total" placeholder="e.g. 5000" min="0" oninput="calcRemaining()"/>
-      </div>
-
-      <!-- 10. Deposit -->
-      <div class="f-group">
-        <label class="f-label">Deposit</label>
-        <input class="f-input" type="number" id="cf-deposit" placeholder="e.g. 2000" min="0" oninput="calcRemaining()"/>
-        <div id="cf-remaining" style="margin-top:6px;font-size:0.8rem;font-weight:700;color:#1f4e4a;display:none">
-          Remaining: ¥<span id="cf-remaining-val">0</span>
+      <!-- Pt Name + Age -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Pt Name <span class="f-req">*</span></label>
+          <input class="f-input" type="text" id="cf-name" placeholder="Patient name"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Age</label>
+          <input class="f-input" type="number" id="cf-age" placeholder="e.g. 32" min="0"/>
         </div>
       </div>
 
-      <!-- 11. Dr. Note -->
-      <div class="f-group">
-        <label class="f-label">Dr. Note</label>
-        <input class="f-input" type="text" id="cf-drnote" placeholder="Doctor's note..."/>
+      <!-- Sex + New/Old (tap-select pills) -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Sex</label>
+          <div class="f-pill-group" id="cf-sex-pills">
+            <div class="f-pill" data-value="Male" onclick="selectPill('cf-sex-pills','cf-sex','Male',this)">Male</div>
+            <div class="f-pill" data-value="Female" onclick="selectPill('cf-sex-pills','cf-sex','Female',this)">Female</div>
+            <div class="f-pill" data-value="Other" onclick="selectPill('cf-sex-pills','cf-sex','Other',this)">Other</div>
+          </div>
+          <input type="hidden" id="cf-sex"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label">New / Old <span class="f-req">*</span></label>
+          <div class="f-pill-group" id="cf-newold-pills">
+            <div class="f-pill" data-value="New" onclick="selectPill('cf-newold-pills','cf-newold','New',this)">New</div>
+            <div class="f-pill" data-value="Old" onclick="selectPill('cf-newold-pills','cf-newold','Old',this)">Old</div>
+          </div>
+          <input type="hidden" id="cf-newold"/>
+        </div>
+      </div>
+
+      <!-- Address + Phone -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Address</label>
+          <input class="f-input" type="text" id="cf-address" placeholder="Patient address"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Phone No.</label>
+          <input class="f-input" type="tel" id="cf-phone" placeholder="e.g. 0812345678"/>
+        </div>
+      </div>
+
+      <!-- Case + Treatment -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Case <span class="f-req">*</span></label>
+          <select class="f-input" id="cf-case" onchange="updateTreatmentList()">
+            <option value="">— Select —</option>
+            <option value="fixed">Fixed</option>
+            <option value="removable">Removable</option>
+            <option value="implant">Implant</option>
+            <option value="ortho">Ortho</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Treatment <span class="f-req">*</span></label>
+          <select class="f-input" id="cf-treatment" onchange="handleTreatmentChange()">
+            <option value="">— Select Case first —</option>
+          </select>
+          <input class="f-input" type="text" id="cf-treatment-custom" placeholder="Type treatment..." style="margin-top:5px;display:none"/>
+        </div>
+      </div>
+
+      <!-- Total Amount + Deposit -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Total Amount</label>
+          <input class="f-input" type="number" id="cf-total" placeholder="e.g. 5000" min="0" oninput="calcRemaining()"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Deposit</label>
+          <input class="f-input" type="number" id="cf-deposit" placeholder="e.g. 2000" min="0" oninput="calcRemaining()"/>
+        </div>
+      </div>
+      <div id="cf-remaining" style="margin-top:-6px;font-size:0.8rem;font-weight:700;color:#1f4e4a;display:none">
+        Remaining: ¥<span id="cf-remaining-val">0</span>
+      </div>
+
+      <!-- Dr. Name + Dr. Note -->
+      <div class="f-row2">
+        <div class="f-group">
+          <label class="f-label">Dr. Name</label>
+          <select class="f-input" id="cf-drname" onchange="handleCaseDrChange()">
+            <option value="">— Select —</option>
+          </select>
+          <input class="f-input" type="text" id="cf-drname-custom" placeholder="Type doctor name..." style="margin-top:5px;display:none"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Dr. Note</label>
+          <input class="f-input" type="text" id="cf-drnote" placeholder="Doctor's note..."/>
+        </div>
       </div>
 
       <!-- Save -->
@@ -4731,7 +4744,8 @@ function openCaseModal(){
   document.getElementById('cf-treatment').innerHTML='<option value="">-- Select Case first --</option>';
   document.getElementById('cf-treatment-custom').style.display='none';
   ['cf-name','cf-age','cf-address','cf-phone','cf-total','cf-deposit'].forEach(id=>document.getElementById(id).value='');
-  ['cf-sex','cf-newold'].forEach(id=>document.getElementById(id).value='');
+  setPillValue('cf-sex-pills','cf-sex','');
+  setPillValue('cf-newold-pills','cf-newold','');
   document.getElementById('cf-remaining').style.display='none';
   document.getElementById('cf-save-btn').textContent='+ Save Entry';
   document.getElementById('cf-save-btn').removeAttribute('data-editing');
@@ -4801,6 +4815,26 @@ function handleTreatmentChange(){
   } else {
     custom.style.display='none';
     custom.value='';
+  }
+}
+
+function selectPill(groupId, hiddenInputId, value, btn){
+  var group=document.getElementById(groupId);
+  if(group){
+    group.querySelectorAll('.f-pill').forEach(function(p){p.classList.remove('active');});
+  }
+  btn.classList.add('active');
+  document.getElementById(hiddenInputId).value=value;
+}
+
+function setPillValue(groupId, hiddenInputId, value){
+  // Used when pre-filling the form for editing an existing record
+  var group=document.getElementById(groupId);
+  document.getElementById(hiddenInputId).value=value||'';
+  if(group){
+    group.querySelectorAll('.f-pill').forEach(function(p){
+      p.classList.toggle('active', p.getAttribute('data-value')===value);
+    });
   }
 }
 
@@ -5238,17 +5272,25 @@ function openPaymentPopup(caseType, recIdx, recKey){
   tbl.appendChild(thead);
   tbl.appendChild(tbody);
 
-  // Input row
+  // Input row — date alone on its own row (date pickers have a fixed
+  // internal minimum width that doesn't compress well), amount + note
+  // paired side by side below.
   var inputRow=document.createElement('div');
-  inputRow.style.cssText='padding:14px 18px;background:#f8fdfc;border-top:1px solid #daeee6;display:flex;gap:8px;flex-wrap:wrap';
-  inputRow.innerHTML='<input id="pay-date" type="date" class="f-input" style="flex:1;min-width:100px"/><input id="pay-amount" type="number" placeholder="Amount" class="f-input" style="flex:1;min-width:80px" min="0"/><input id="pay-note" type="text" placeholder="Note" class="f-input" style="flex:1;min-width:80px"/>';
+  inputRow.style.cssText='padding:14px 18px;background:#f8fdfc;border-top:1px solid #daeee6;display:flex;flex-direction:column;gap:8px';
+  var dateRow=document.createElement('div');
+  dateRow.innerHTML='<input id="pay-date" type="date" class="f-input" style="width:100%"/>';
+  var amtNoteRow=document.createElement('div');
+  amtNoteRow.style.cssText='display:flex;gap:8px';
+  amtNoteRow.innerHTML='<input id="pay-amount" type="number" placeholder="Amount" class="f-input" style="flex:1;min-width:0" min="0"/><input id="pay-note" type="text" placeholder="Note" class="f-input" style="flex:1;min-width:0"/>';
   var addBtn=document.createElement('button');
   addBtn.textContent='+ Add';
-  addBtn.style.cssText='padding:8px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;font-weight:700;cursor:pointer;font-size:0.85rem;white-space:nowrap';
+  addBtn.style.cssText='padding:12px 14px;border:none;border-radius:8px;background:#1f4e4a;color:#fff;font-weight:700;cursor:pointer;font-size:0.92rem;width:100%';
   addBtn.setAttribute('data-ct',caseType);
   addBtn.setAttribute('data-rec',recIdx);
   addBtn.setAttribute('data-key',recKey);
   addBtn.onclick=function(){addPaymentEntry(this.getAttribute('data-ct'),parseInt(this.getAttribute('data-rec')),this.getAttribute('data-key'));};
+  inputRow.appendChild(dateRow);
+  inputRow.appendChild(amtNoteRow);
   inputRow.appendChild(addBtn);
 
   box.appendChild(hdr);
@@ -5370,8 +5412,8 @@ function editCaseRec(caseType,i){
   document.getElementById('cf-treatment').value=r.treat;
   document.getElementById('cf-name').value=r.name;
   document.getElementById('cf-age').value=r.age||'';
-  document.getElementById('cf-sex').value=r.sex||'';
-  document.getElementById('cf-newold').value=r.newold;
+  setPillValue('cf-sex-pills','cf-sex',r.sex||'');
+  setPillValue('cf-newold-pills','cf-newold',r.newold||'');
   document.getElementById('cf-address').value=r.address||'';
   document.getElementById('cf-phone').value=r.phone||'';
   document.getElementById('cf-drname').value=r.drname||'';
