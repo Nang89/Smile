@@ -5988,23 +5988,45 @@ function supabaseLoadAll(callback){
   sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
   .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
-    if(Array.isArray(d)){
-      records=fixRecordDates(d.map(function(r){
+    if(Array.isArray(d)&&(d.length>0||records.length===0)){
+      var sbRecords=fixRecordDates(d.map(function(r){
         return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,doctor:r.doctor,
                 ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                 createdAt:r.createdat,updatedAt:r.updatedat};
       }));
+      // Check localStorage for any records saved locally but not yet in
+      // Supabase — these are records where the async HTTP save didn't
+      // complete before the page was closed (the "last 2 records" bug).
+      // Merge them in and re-send them to Supabase now.
+      var sbKeys=new Set(sbRecords.map(function(r){return r._key;}));
+      var localRaw=LS.get('dental-records');
+      if(localRaw){
+        try{
+          var localRecords=JSON.parse(localRaw);
+          localRecords.forEach(function(r){
+            if(r._key&&!sbKeys.has(r._key)){
+              // This record is in localStorage but missing from Supabase
+              // — re-send it now so it isn't permanently lost.
+              sbRecords.push(r);
+              fbSaveRecord(r);
+            }
+          });
+        }catch(e){}
+      }
+      records=sbRecords;
       LS.set('dental-records',JSON.stringify(records));
     }
     done();
-  }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');done();});
+  }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');done()});
 
   // Load case records
   sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
   .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
-    if(Array.isArray(d)){
+    var totalExisting=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
+    if(Array.isArray(d)&&(d.length>0||totalExisting===0)){
       var cr={fixed:[],removable:[],implant:[],ortho:[]};
+      var sbCaseKeys=new Set();
       d.forEach(function(r){
         var cat=r.category;
         if(!cr[cat]) return;
@@ -6017,7 +6039,24 @@ function supabaseLoadAll(callback){
         };
         try{rec.depositLog=JSON.parse(r.depositlog||'[]');}catch(e){rec.depositLog=[];}
         cr[cat].push(rec);
+        sbCaseKeys.add(r.id);
       });
+      // Recover any case records saved locally but not yet in Supabase
+      var localCaseRaw=LS.get('caseRecords');
+      if(localCaseRaw){
+        try{
+          var localCR=JSON.parse(localCaseRaw);
+          ['fixed','removable','implant','ortho'].forEach(function(cat){
+            (localCR[cat]||[]).forEach(function(r){
+              if(r._key&&!sbCaseKeys.has(r._key)){
+                if(!cr[cat]) cr[cat]=[];
+                cr[cat].push(r);
+                fbSaveCaseRecord(cat,r);
+              }
+            });
+          });
+        }catch(e){}
+      }
       caseRecords=cr;
       LS.set('caseRecords',JSON.stringify(caseRecords));
     }
@@ -6115,11 +6154,19 @@ function supabaseLoadAll(callback){
 }
 
 // ── Realtime subscriptions ──
+var _supabaseWs=null;
 function startSupabaseRealtime(){
+  // Close any existing connection before opening a new one, so we don't
+  // accumulate multiple WebSocket listeners that each fire applyRealtimeChange
+  // independently — causing double-processing of every realtime event.
+  if(_supabaseWs&&(_supabaseWs.readyState===0||_supabaseWs.readyState===1)){
+    try{_supabaseWs.close();}catch(e){}
+  }
   // Use Supabase realtime via websocket
   var wsUrl=SB_URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+SB_KEY+'&vsn=1.0.0';
   try{
     var ws=new WebSocket(wsUrl);
+    _supabaseWs=ws;
     ws.onopen=function(){
       // Subscribe to all table changes
       var msg={topic:'realtime:public',event:'phx_join',payload:{config:{broadcast:{self:true},presence:{key:''},postgres_changes:[
@@ -6178,7 +6225,7 @@ function applyRealtimeChange(tbl, changeType, newRow, oldRow){
         records=records.filter(function(r){return r._key!==oldRow.id;});
       }
     } else if(newRow){
-      if(newRow.deleted){
+      if(newRow.deleted===true||newRow.deleted==='true'){
         records=records.filter(function(r){return r._key!==newRow.id;});
       } else {
         var mapped={date:newRow.date,on:newRow.on_,sex:newRow.sex,cas:newRow.cas,price:newRow.price,
@@ -6205,7 +6252,7 @@ function applyRealtimeChange(tbl, changeType, newRow, oldRow){
     } else if(newRow){
       var cat=newRow.category;
       if(cat&&caseRecords[cat]){
-        if(newRow.deleted){
+        if(newRow.deleted===true||newRow.deleted==='true'){
           caseRecords[cat]=caseRecords[cat].filter(function(r){return r._key!==newRow.id;});
         } else {
           var rec={date:newRow.date,treat:newRow.treat,name:newRow.name,age:newRow.age,sex:newRow.sex,
