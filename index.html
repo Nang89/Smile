@@ -2405,140 +2405,95 @@ function jumpToToday(){
 }
 
 function printDayClose(){
-  // Build the date string for the currently viewed day
   var y=viewDate.getFullYear();
   var m=String(viewDate.getMonth()+1).padStart(2,'0');
   var d=String(viewDate.getDate()).padStart(2,'0');
   var dateStr=y+'-'+m+'-'+d;
   var dateLabel=d+' '+MONTHS[viewDate.getMonth()]+' '+y;
+  var printTime=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
-  // --- Non Prothesis: ALL of today's daily records ---
-  // Daily records = chair-side treatments (fillings, RCT, extractions etc)
+  // All daily records for today — this is the ONLY source of truth
+  // so Grand Total will always match the TOTAL bar in the table
   var dailyRecs=records.filter(function(r){return r.date===dateStr;});
-  var nonProthMap={};
-  var nonProthTotal=0;
-  dailyRecs.forEach(function(r){
-    var cas=r.cas||'Other';
-    if(!nonProthMap[cas]) nonProthMap[cas]={count:0,total:0};
-    nonProthMap[cas].count++;
-    nonProthMap[cas].total+=Number(r.price)||0;
-    nonProthTotal+=Number(r.price)||0;
-  });
 
-  // Helper: sum payments received TODAY from a case record's depositLog
-  function todayPayments(rec){
-    if(!rec.depositLog||!rec.depositLog.length) return 0;
-    return rec.depositLog.reduce(function(sum,entry){
-      if(entry.date===dateStr) return sum+Number(entry.amount||0);
-      return sum;
-    },0);
-  }
+  // Split into categories using the fromCase flag:
+  // fromCase=true means it was added from a Case Record payment
+  // fromCase=false/undefined = chair-side daily treatment (Non Prothesis)
+  // For case-originated records, the treatment maps to which tab it came from
+  var nonProthTotal=0;  // daily records NOT from a case (fillings, RCT etc)
+  var prothTotal=0;     // fromCase, Fixed or Removable
+  var implantTotal=0;   // fromCase, Implant
+  var orthoTotal=0;     // fromCase, Ortho
 
-  // --- Prothesis: payments received today from Fixed + Removable cases ---
-  var prothMap={};
-  var prothTotal=0;
-  ['fixed','removable'].forEach(function(cat){
-    (caseRecords[cat]||[]).forEach(function(r){
-      var paid=todayPayments(r);
-      if(paid<=0) return;
-      var t=r.treat||'Other';
-      if(!prothMap[t]) prothMap[t]={count:0,total:0};
-      prothMap[t].count++;
-      prothMap[t].total+=paid;
-      prothTotal+=paid;
+  // Build a lookup of case record keys to their category
+  var caseKeyToTab={};
+  ['fixed','removable','implant','ortho'].forEach(function(tab){
+    (caseRecords[tab]||[]).forEach(function(r){
+      if(r._key) caseKeyToTab[r._key]=tab;
     });
   });
 
-  // --- Implant: payments received today from Implant cases ---
-  var implantMap={};
-  var implantTotal=0;
-  (caseRecords.implant||[]).forEach(function(r){
-    var paid=todayPayments(r);
-    if(paid<=0) return;
-    var t=r.treat||'Other';
-    if(!implantMap[t]) implantMap[t]={count:0,total:0};
-    implantMap[t].count++;
-    implantMap[t].total+=paid;
-    implantTotal+=paid;
-  });
-
-  // --- Ortho: payments received today from Ortho cases ---
-  var orthoMap={};
-  var orthoTotal=0;
-  (caseRecords.ortho||[]).forEach(function(r){
-    var paid=todayPayments(r);
-    if(paid<=0) return;
-    var t=r.treat||'Other';
-    if(!orthoMap[t]) orthoMap[t]={count:0,total:0};
-    orthoMap[t].count++;
-    orthoMap[t].total+=paid;
-    orthoTotal+=paid;
+  dailyRecs.forEach(function(r){
+    var price=Number(r.price)||0;
+    if(!r.fromCase){
+      nonProthTotal+=price;
+    } else {
+      // fromCase record — look up which tab it belongs to
+      // The daily record's cas field holds the treatment name
+      // and its _key might link to a case record
+      var tab=r.caseKey?caseKeyToTab[r.caseKey]:null;
+      if(!tab){
+        // Fallback: guess from treatment name in caseRecords
+        var found=false;
+        ['fixed','removable','implant','ortho'].forEach(function(t){
+          if(found) return;
+          if((caseRecords[t]||[]).some(function(c){return c.treat===r.cas||c.name===r.ptname;})){
+            tab=t;found=true;
+          }
+        });
+      }
+      if(tab==='fixed'||tab==='removable') prothTotal+=price;
+      else if(tab==='implant') implantTotal+=price;
+      else if(tab==='ortho') orthoTotal+=price;
+      else prothTotal+=price; // default fromCase to prothesis
+    }
   });
 
   var grandTotal=nonProthTotal+prothTotal+implantTotal+orthoTotal;
-
-  // Build receipt rows HTML
-  function buildRows(map){
-    var html='';
-    Object.keys(map).forEach(function(name){
-      var item=map[name];
-      html+='<tr>'
-        +'<td style="padding:2px 4px;font-size:11px">'+name+'</td>'
-        +'<td style="padding:2px 4px;font-size:11px;text-align:center">×'+item.count+'</td>'
-        +'<td style="padding:2px 4px;font-size:11px;text-align:right">¥'+item.total.toLocaleString()+'</td>'
-        +'</tr>';
-    });
-    return html||'<tr><td colspan="3" style="padding:2px 4px;font-size:11px;color:#aaa">—</td></tr>';
-  }
-
-  function sectionHeader(title,total){
-    return '<tr style="background:#1f4e4a">'
-      +'<td colspan="2" style="padding:4px 4px;font-size:11px;font-weight:700;color:#fff">'+title+'</td>'
-      +'<td style="padding:4px 4px;font-size:11px;font-weight:700;color:#fff;text-align:right">¥'+total.toLocaleString()+'</td>'
-      +'</tr>';
-  }
-
-  var printTime=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  var caseCount=Object.values(prothMap).reduce(function(s,v){return s+v.count;},0)
-    +Object.values(implantMap).reduce(function(s,v){return s+v.count;},0)
-    +Object.values(orthoMap).reduce(function(s,v){return s+v.count;},0);
+  function fmt(n){return '¥'+Number(n).toLocaleString();}
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    +'<title>Day Close — '+dateLabel+'</title>'
+    +'<title>Day Close '+dateLabel+'</title>'
     +'<style>'
     +'@page{size:80mm auto;margin:4mm}'
     +'*{margin:0;padding:0;box-sizing:border-box}'
-    +'body{font-family:monospace;width:72mm;font-size:11px}'
+    +'body{font-family:monospace;width:72mm;font-size:12px}'
     +'table{width:100%;border-collapse:collapse}'
-    +'hr{border:none;border-top:1px dashed #000;margin:4px 0}'
+    +'td{padding:4px 2px}'
+    +'hr{border:none;border-top:1px dashed #000;margin:5px 0}'
     +'</style></head><body>'
     +'<div style="text-align:center;margin-bottom:6px">'
-    +'<div style="font-size:14px;font-weight:700">SMILE DENTAL CLINIC</div>'
-    +'<div style="font-size:11px">Day Close Summary</div>'
-    +'<div style="font-size:11px">'+dateLabel+' &nbsp;|&nbsp; Printed: '+printTime+'</div>'
+    +'<div style="font-size:15px;font-weight:700">SMILE DENTAL CLINIC</div>'
+    +'<div style="font-size:11px">Day Close — '+dateLabel+'</div>'
+    +'<div style="font-size:10px">Printed: '+printTime+'</div>'
     +'</div>'
     +'<hr>'
     +'<table>'
-    +sectionHeader('Non Prothesis',nonProthTotal)
-    +buildRows(nonProthMap)
-    +sectionHeader('Prothesis',prothTotal)
-    +buildRows(prothMap)
-    +sectionHeader('Implant',implantTotal)
-    +buildRows(implantMap)
-    +sectionHeader('Ortho',orthoTotal)
-    +buildRows(orthoMap)
+    +'<tr><td>Non Prothesis</td><td style="text-align:right;font-weight:700">'+fmt(nonProthTotal)+'</td></tr>'
+    +'<tr><td>Prothesis</td><td style="text-align:right;font-weight:700">'+fmt(prothTotal)+'</td></tr>'
+    +'<tr><td>Implant</td><td style="text-align:right;font-weight:700">'+fmt(implantTotal)+'</td></tr>'
+    +'<tr><td>Ortho</td><td style="text-align:right;font-weight:700">'+fmt(orthoTotal)+'</td></tr>'
     +'</table>'
     +'<hr>'
     +'<table><tr>'
     +'<td style="font-size:13px;font-weight:700">GRAND TOTAL</td>'
-    +'<td style="font-size:13px;font-weight:700;text-align:right">¥'+grandTotal.toLocaleString()+'</td>'
+    +'<td style="font-size:13px;font-weight:700;text-align:right">'+fmt(grandTotal)+'</td>'
     +'</tr></table>'
     +'<hr>'
-    +'<div style="text-align:center;margin-top:6px;font-size:10px">Daily: '+dailyRecs.length+' records &nbsp;|&nbsp; Case payments: '+caseCount+'</div>'
-    +'<div style="text-align:center;font-size:10px;margin-top:2px">— End of Day —</div>'
+    +'<div style="text-align:center;font-size:10px;margin-top:4px">Patients: '+dailyRecs.length+' — End of Day —</div>'
     +'</body></html>';
 
-  var win=window.open('','_blank','width=320,height=600');
+  var win=window.open('','_blank','width=320,height=480');
   win.document.write(html);
   win.document.close();
   win.focus();
