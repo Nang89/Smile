@@ -5974,8 +5974,10 @@ function firebaseConnect(){
     showSyncStatus('Connected','#27ae60');
     updateBadges();
     renderCurrentPage();
-    // Start realtime subscription
+    // Start realtime subscription (requires Realtime enabled per-table in Supabase)
     startSupabaseRealtime();
+    // Start polling sync (reliable fallback that works regardless of realtime config)
+    startPollingSync();
   });
 }
 
@@ -6159,6 +6161,7 @@ function startSupabaseRealtime(){
   // Close any existing connection before opening a new one, so we don't
   // accumulate multiple WebSocket listeners that each fire applyRealtimeChange
   // independently — causing double-processing of every realtime event.
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(_supabaseWs&&(_supabaseWs.readyState===0||_supabaseWs.readyState===1)){
     try{_supabaseWs.close();}catch(e){}
   }
@@ -6906,6 +6909,88 @@ function openSyncSettings(){
     +'<button onclick="removeModalById(\'sync-modal\')" style="padding:8px 14px;border:1px solid #cce0da;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.85rem">Close</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
+}
+
+// ── Cross-device polling sync ──
+// WebSocket realtime requires explicit enablement per-table in Supabase
+// dashboard and drops on network changes. This polling fallback re-fetches
+// every 30 seconds regardless, merging in changes from other devices.
+var pollTimer=null;
+function startPollingSync(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer=setInterval(function(){
+    if(!sbOnline||!appFullyLoaded) return;
+
+    // Poll records — fetch the 500 most recently updated,
+    // apply any that aren't our own pending writes
+    sbFetch('records','GET',null,'deleted=eq.false&order=updatedat.desc&limit=500')
+    .then(function(r){if(!r.ok)throw new Error();return r.json();})
+    .then(function(d){
+      if(!Array.isArray(d)||d.length===0) return;
+      var changed=false;
+      d.forEach(function(r){
+        if(pendingOwnWrites[r.id]) return;
+        var mapped=fixRecordDates([{date:r.date,on:r.on_,sex:r.sex,cas:r.cas,
+          price:r.price,doctor:r.doctor,ptname:r.ptname,
+          fromCase:r.fromcase,_key:r.id,
+          createdAt:r.createdat,updatedAt:r.updatedat}])[0];
+        if(r.deleted===true||r.deleted==='true'){
+          var before=records.length;
+          records=records.filter(function(x){return x._key!==r.id;});
+          if(records.length!==before) changed=true;
+        } else {
+          var idx=records.findIndex(function(x){return x._key===r.id;});
+          if(idx>=0){
+            // Always take server version — avoids timestamp type mismatch bugs
+            records[idx]=mapped; changed=true;
+          } else {
+            records.push(mapped); changed=true;
+          }
+        }
+      });
+      if(changed){
+        LS.set('dental-records',JSON.stringify(records));
+        updateBadges();
+        if(currentPage==='patients') render();
+        if(currentPage==='dashboard') renderDashboard();
+      }
+    }).catch(function(){});
+
+    // Poll case_records
+    sbFetch('case_records','GET',null,'deleted=eq.false&order=updatedat.desc&limit=500')
+    .then(function(r){if(!r.ok)throw new Error();return r.json();})
+    .then(function(d){
+      if(!Array.isArray(d)||d.length===0) return;
+      var changed=false;
+      d.forEach(function(r){
+        if(pendingOwnWrites[r.id]) return;
+        var cat=r.category;
+        if(!cat||!caseRecords[cat]) return;
+        var rec={date:r.date,treat:r.treat,name:r.name,age:r.age,sex:r.sex,
+          newold:r.newold,address:r.address,phone:r.phone,drname:r.drname,
+          total:r.total,drnote:r.drnote,done:r.done,doneDate:r.donedate||'',
+          _key:r.id,createdAt:r.createdat,updatedAt:r.updatedat,depositLog:[]};
+        try{rec.depositLog=JSON.parse(r.depositlog||'[]');}catch(e){}
+        if(r.deleted===true||r.deleted==='true'){
+          var before=caseRecords[cat].length;
+          caseRecords[cat]=caseRecords[cat].filter(function(x){return x._key!==r.id;});
+          if(caseRecords[cat].length!==before) changed=true;
+        } else {
+          var idx=caseRecords[cat].findIndex(function(x){return x._key===r.id;});
+          if(idx>=0){
+            caseRecords[cat][idx]=rec; changed=true;
+          } else {
+            caseRecords[cat].push(rec); changed=true;
+          }
+        }
+      });
+      if(changed){
+        LS.set('caseRecords',JSON.stringify(caseRecords));
+        if(currentPage==='cases')
+          ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
+      }
+    }).catch(function(){});
+  },10000); // every 10 seconds
 }
 
 // ── Backup to Google Sheets (reads from Supabase) ──
