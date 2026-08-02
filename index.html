@@ -5985,7 +5985,7 @@ function supabaseLoadAll(callback){
   function done(){ loaded++; if(loaded>=total && callback) callback(); }
 
   // Load records
-  sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
+  sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
   .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
     if(Array.isArray(d)&&(d.length>0||records.length===0)){
@@ -6020,7 +6020,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');done()});
 
   // Load case records
-  sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
+  sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
   .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(d){
     var totalExisting=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
@@ -6064,7 +6064,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load case records failed:',e);showSyncStatus('Could not load Case Records - check connection','#c0392b');done();});
 
   // Load pharmacy income
-  sbFetch('pharmacy_income','GET',null,'deleted=eq.false&order=updatedat.asc')
+  sbFetch('pharmacy_income','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
   .then(function(r){return r.json();})
   .then(function(d){
     if(Array.isArray(d)){
@@ -6077,7 +6077,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy income failed:',e);done();});
 
   // Load pharmacy purchase
-  sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&order=updatedat.asc')
+  sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
   .then(function(r){return r.json();})
   .then(function(d){
     if(Array.isArray(d)){
@@ -6091,7 +6091,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy purchase failed:',e);done();});
 
   // Load pharmacy expend
-  sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&order=updatedat.asc')
+  sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
   .then(function(r){return r.json();})
   .then(function(d){
     if(Array.isArray(d)){
@@ -6104,7 +6104,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy expend failed:',e);done();});
 
   // Load inventory
-  sbFetch('inv_stock_in','GET',null,'deleted=eq.false&order=updatedat.asc')
+  sbFetch('inv_stock_in','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
   .then(function(r){return r.json();})
   .then(function(d){
     if(Array.isArray(d)){
@@ -6272,7 +6272,7 @@ function applyRealtimeChange(tbl, changeType, newRow, oldRow){
 
 function supabaseReloadTable(tbl){
   if(tbl==='records'){
-    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc')
+    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
     .then(function(r){return r.json();})
     .then(function(d){
       if(Array.isArray(d)){
@@ -6289,7 +6289,7 @@ function supabaseReloadTable(tbl){
     });
   }
   if(tbl==='case_records'){
-    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc')
+    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
     .then(function(r){return r.json();})
     .then(function(d){
       if(Array.isArray(d)){
@@ -6932,12 +6932,12 @@ function backupToSheets(silent,retryCount){
 
   // Read all data from Supabase then send to Google Sheets
   var fetches=[
-    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc').then(function(r){return r.json();}),
-    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc').then(function(r){return r.json();}),
-    sbFetch('pharmacy_income','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
-    sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
-    sbFetch('pharmacy_expend','GET',null,'deleted=eq.false').then(function(r){return r.json();}),
-    sbFetch('inv_stock_in','GET',null,'deleted=eq.false').then(function(r){return r.json();})
+    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000').then(function(r){return r.json();}),
+    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000').then(function(r){return r.json();}),
+    sbFetch('pharmacy_income','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
+    sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
+    sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
+    sbFetch('inv_stock_in','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();})
   ];
 
   Promise.all(fetches)
