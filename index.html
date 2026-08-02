@@ -657,6 +657,7 @@ input, select, textarea{
                 <tr>
                   <th>No</th>
                   <th>Old/New</th>
+                  <th>Sex</th>
                   <th>Treatment</th>
                   <th>Price</th>
                   <th>Dr Name</th>
@@ -669,6 +670,9 @@ input, select, textarea{
             <div id="total-bar" style="display:none;padding:12px 16px;background:#1f4e4a;color:#fff;font-weight:700;font-size:0.9rem;display:flex;justify-content:space-between;align-items:center">
               <span>TOTAL</span>
               <span id="total-price"></span>
+            </div>
+            <div style="padding:10px 16px;text-align:right;border-top:1px solid #e0eeea">
+              <button onclick="printDayClose()" style="background:#e2b76a;color:#3a2a10;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:inherit">🖨 Close Register</button>
             </div>
           </div>
         </div>
@@ -1229,6 +1233,7 @@ input, select, textarea{
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">No</th>
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Date</th>
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Old/New</th>
+                  <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Sex</th>
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Treatment</th>
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Price</th>
                   <th style="padding:18px 16px;text-align:left;font-size:0.75rem;font-weight:700;color:#1f4e4a;text-transform:uppercase;letter-spacing:0.06em">Dr Name</th>
@@ -2398,6 +2403,147 @@ function jumpToToday(){
   updateDateLabel();
   render();
 }
+
+function printDayClose(){
+  // Build the date string for the currently viewed day
+  var y=viewDate.getFullYear();
+  var m=String(viewDate.getMonth()+1).padStart(2,'0');
+  var d=String(viewDate.getDate()).padStart(2,'0');
+  var dateStr=y+'-'+m+'-'+d;
+  var dateLabel=d+' '+MONTHS[viewDate.getMonth()]+' '+y;
+
+  // --- Non Prothesis: ALL of today's daily records ---
+  // Daily records = chair-side treatments (fillings, RCT, extractions etc)
+  var dailyRecs=records.filter(function(r){return r.date===dateStr;});
+  var nonProthMap={};
+  var nonProthTotal=0;
+  dailyRecs.forEach(function(r){
+    var cas=r.cas||'Other';
+    if(!nonProthMap[cas]) nonProthMap[cas]={count:0,total:0};
+    nonProthMap[cas].count++;
+    nonProthMap[cas].total+=Number(r.price)||0;
+    nonProthTotal+=Number(r.price)||0;
+  });
+
+  // Helper: sum payments received TODAY from a case record's depositLog
+  function todayPayments(rec){
+    if(!rec.depositLog||!rec.depositLog.length) return 0;
+    return rec.depositLog.reduce(function(sum,entry){
+      if(entry.date===dateStr) return sum+Number(entry.amount||0);
+      return sum;
+    },0);
+  }
+
+  // --- Prothesis: payments received today from Fixed + Removable cases ---
+  var prothMap={};
+  var prothTotal=0;
+  ['fixed','removable'].forEach(function(cat){
+    (caseRecords[cat]||[]).forEach(function(r){
+      var paid=todayPayments(r);
+      if(paid<=0) return;
+      var t=r.treat||'Other';
+      if(!prothMap[t]) prothMap[t]={count:0,total:0};
+      prothMap[t].count++;
+      prothMap[t].total+=paid;
+      prothTotal+=paid;
+    });
+  });
+
+  // --- Implant: payments received today from Implant cases ---
+  var implantMap={};
+  var implantTotal=0;
+  (caseRecords.implant||[]).forEach(function(r){
+    var paid=todayPayments(r);
+    if(paid<=0) return;
+    var t=r.treat||'Other';
+    if(!implantMap[t]) implantMap[t]={count:0,total:0};
+    implantMap[t].count++;
+    implantMap[t].total+=paid;
+    implantTotal+=paid;
+  });
+
+  // --- Ortho: payments received today from Ortho cases ---
+  var orthoMap={};
+  var orthoTotal=0;
+  (caseRecords.ortho||[]).forEach(function(r){
+    var paid=todayPayments(r);
+    if(paid<=0) return;
+    var t=r.treat||'Other';
+    if(!orthoMap[t]) orthoMap[t]={count:0,total:0};
+    orthoMap[t].count++;
+    orthoMap[t].total+=paid;
+    orthoTotal+=paid;
+  });
+
+  var grandTotal=nonProthTotal+prothTotal+implantTotal+orthoTotal;
+
+  // Build receipt rows HTML
+  function buildRows(map){
+    var html='';
+    Object.keys(map).forEach(function(name){
+      var item=map[name];
+      html+='<tr>'
+        +'<td style="padding:2px 4px;font-size:11px">'+name+'</td>'
+        +'<td style="padding:2px 4px;font-size:11px;text-align:center">×'+item.count+'</td>'
+        +'<td style="padding:2px 4px;font-size:11px;text-align:right">¥'+item.total.toLocaleString()+'</td>'
+        +'</tr>';
+    });
+    return html||'<tr><td colspan="3" style="padding:2px 4px;font-size:11px;color:#aaa">—</td></tr>';
+  }
+
+  function sectionHeader(title,total){
+    return '<tr style="background:#1f4e4a">'
+      +'<td colspan="2" style="padding:4px 4px;font-size:11px;font-weight:700;color:#fff">'+title+'</td>'
+      +'<td style="padding:4px 4px;font-size:11px;font-weight:700;color:#fff;text-align:right">¥'+total.toLocaleString()+'</td>'
+      +'</tr>';
+  }
+
+  var printTime=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var caseCount=Object.values(prothMap).reduce(function(s,v){return s+v.count;},0)
+    +Object.values(implantMap).reduce(function(s,v){return s+v.count;},0)
+    +Object.values(orthoMap).reduce(function(s,v){return s+v.count;},0);
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Day Close — '+dateLabel+'</title>'
+    +'<style>'
+    +'@page{size:80mm auto;margin:4mm}'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:monospace;width:72mm;font-size:11px}'
+    +'table{width:100%;border-collapse:collapse}'
+    +'hr{border:none;border-top:1px dashed #000;margin:4px 0}'
+    +'</style></head><body>'
+    +'<div style="text-align:center;margin-bottom:6px">'
+    +'<div style="font-size:14px;font-weight:700">SMILE DENTAL CLINIC</div>'
+    +'<div style="font-size:11px">Day Close Summary</div>'
+    +'<div style="font-size:11px">'+dateLabel+' &nbsp;|&nbsp; Printed: '+printTime+'</div>'
+    +'</div>'
+    +'<hr>'
+    +'<table>'
+    +sectionHeader('Non Prothesis',nonProthTotal)
+    +buildRows(nonProthMap)
+    +sectionHeader('Prothesis',prothTotal)
+    +buildRows(prothMap)
+    +sectionHeader('Implant',implantTotal)
+    +buildRows(implantMap)
+    +sectionHeader('Ortho',orthoTotal)
+    +buildRows(orthoMap)
+    +'</table>'
+    +'<hr>'
+    +'<table><tr>'
+    +'<td style="font-size:13px;font-weight:700">GRAND TOTAL</td>'
+    +'<td style="font-size:13px;font-weight:700;text-align:right">¥'+grandTotal.toLocaleString()+'</td>'
+    +'</tr></table>'
+    +'<hr>'
+    +'<div style="text-align:center;margin-top:6px;font-size:10px">Daily: '+dailyRecs.length+' records &nbsp;|&nbsp; Case payments: '+caseCount+'</div>'
+    +'<div style="text-align:center;font-size:10px;margin-top:2px">— End of Day —</div>'
+    +'</body></html>';
+
+  var win=window.open('','_blank','width=320,height=600');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(function(){win.print();},400);
+}
 updateDateLabel();
 
 // Default date
@@ -2563,6 +2709,7 @@ function render(){
 
     const td1=document.createElement('td');td1.textContent=i+1;
     const td2=document.createElement('td');td2.textContent=r.on;
+    const td2b=document.createElement('td');td2b.textContent=r.sex||'';
     const td3=document.createElement('td');td3.textContent=r.cas;
     const td4=document.createElement('td');td4.textContent=r.price?'\u00a5'+Number(r.price).toLocaleString():'';
     const td5=document.createElement('td');td5.textContent=r.doctor||'';
@@ -2571,7 +2718,7 @@ function render(){
     td7.appendChild(editBtn);
     td7.appendChild(delBtn);
 
-    tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td3);
+    tr.appendChild(td1);tr.appendChild(td2);tr.appendChild(td2b);tr.appendChild(td3);
     tr.appendChild(td4);tr.appendChild(td5);tr.appendChild(td6);
     tr.appendChild(td7);
     tbody.appendChild(tr);
@@ -2740,6 +2887,7 @@ function renderLedger(){
       '<td style="'+tdS+'">'+(i+1)+'</td>'+
       '<td style="'+tdS+'">'+r.date+'</td>'+
       '<td style="'+tdS+'">'+r.on+'</td>'+
+      '<td style="'+tdS+'">'+(r.sex||'')+'</td>'+
       '<td style="'+tdS+'">'+r.cas+'</td>'+
       '<td style="'+tdS+'">'+(r.price?'\u00a5'+Number(r.price).toLocaleString():'')+'</td>'+
       '<td style="'+tdS+'">'+(r.doctor||'')+'</td>'+
