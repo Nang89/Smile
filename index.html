@@ -6082,7 +6082,14 @@ function firebaseConnect(){
     updateBadges();
     renderCurrentPage();
     // Start realtime subscription (requires Realtime enabled per-table in Supabase)
-    startSupabaseRealtime();
+    // Realtime (WebSocket) deliberately DISABLED.
+    // A persistent WebSocket connection to a foreign endpoint is the
+    // exact traffic pattern deep packet inspection systems flag and
+    // reset — after enabling it, ALL requests to the proxy started
+    // getting ERR_CONNECTION_RESET, including ordinary ones that had
+    // worked fine before. Polling below handles sync reliably using
+    // only short, ordinary-looking requests.
+    // startSupabaseRealtime();
     // Start polling sync (reliable fallback that works regardless of realtime config)
     startPollingSync();
   });
