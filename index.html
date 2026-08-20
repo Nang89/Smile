@@ -6264,20 +6264,38 @@ function supabaseLoadAll(callback){
 
 // ── Realtime subscriptions ──
 var _supabaseWs=null;
+var realtimeConnected=false;
 function startSupabaseRealtime(){
-  // Close any existing connection before opening a new one, so we don't
-  // accumulate multiple WebSocket listeners that each fire applyRealtimeChange
-  // independently — causing double-processing of every realtime event.
-  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  // IMPORTANT: do NOT stop polling here just because we're attempting a
+  // realtime connection — polling should only stop once realtime is
+  // CONFIRMED working (subscription acknowledged), and must resume
+  // immediately if realtime fails, times out, or later disconnects.
+  // Previously this killed polling on every connect attempt regardless
+  // of whether the WebSocket actually succeeded, which could leave the
+  // app with no sync mechanism running at all if realtime silently failed.
+  realtimeConnected=false;
+
   if(_supabaseWs&&(_supabaseWs.readyState===0||_supabaseWs.readyState===1)){
     try{_supabaseWs.close();}catch(e){}
   }
-  // Use Supabase realtime via websocket
+
   var wsUrl=SB_URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+SB_KEY+'&vsn=1.0.0';
   try{
     var ws=new WebSocket(wsUrl);
     _supabaseWs=ws;
+
+    // If the connection doesn't open within 6 seconds, give up on this
+    // attempt and make sure polling is running as the fallback.
+    var connectTimeout=setTimeout(function(){
+      if(!realtimeConnected){
+        console.log('Realtime connect timed out - relying on polling');
+        try{ws.close();}catch(e){}
+        if(!pollTimer) startPollingSync();
+      }
+    },6000);
+
     ws.onopen=function(){
+      clearTimeout(connectTimeout);
       // Subscribe to all table changes
       var msg={topic:'realtime:public',event:'phx_join',payload:{config:{broadcast:{self:true},presence:{key:''},postgres_changes:[
         {event:'*',schema:'public',table:'records'},
@@ -6289,13 +6307,23 @@ function startSupabaseRealtime(){
       ]}},ref:'1'};
       ws.send(JSON.stringify(msg));
       // Keep alive
-      setInterval(function(){
+      var hbTimer=setInterval(function(){
         if(ws.readyState===1) ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
+        else clearInterval(hbTimer);
       },30000);
     };
     ws.onmessage=function(e){
       try{
         var msg=JSON.parse(e.data);
+        // A successful join reply confirms the subscription is actually
+        // active — only NOW is it safe to consider realtime working and
+        // stop relying purely on polling. Polling is still left running
+        // as a safety net either way (see startPollingSync's own guard),
+        // so this doesn't remove the fallback, just confirms realtime.
+        if(msg.event==='phx_reply'&&msg.payload&&msg.payload.status==='ok'){
+          realtimeConnected=true;
+          console.log('Realtime subscription confirmed active');
+        }
         if(msg.event==='postgres_changes'&&msg.payload&&msg.payload.data){
           var tbl=msg.payload.data.table;
           var changeType=msg.payload.data.type; // INSERT, UPDATE, DELETE
@@ -6307,8 +6335,21 @@ function startSupabaseRealtime(){
         }
       }catch(ex){}
     };
-    ws.onerror=function(){showSyncStatus('Realtime error','#e67e22');};
-  }catch(e){}
+    ws.onerror=function(){
+      realtimeConnected=false;
+      showSyncStatus('Realtime error - using backup sync','#e67e22');
+      if(!pollTimer) startPollingSync();
+    };
+    ws.onclose=function(){
+      realtimeConnected=false;
+      // Connection dropped — make sure polling is running so sync
+      // doesn't silently stop. Will also auto-retry the WebSocket.
+      if(!pollTimer) startPollingSync();
+    };
+  }catch(e){
+    realtimeConnected=false;
+    if(!pollTimer) startPollingSync();
+  }
 }
 
 // Tracks _key values we just wrote ourselves, so we can ignore the echoed
@@ -7023,10 +7064,23 @@ function openSyncSettings(){
 // dashboard and drops on network changes. This polling fallback re-fetches
 // every 30 seconds regardless, merging in changes from other devices.
 var pollTimer=null;
+var pollInFlight=false;
 function startPollingSync(){
   if(pollTimer) clearInterval(pollTimer);
   pollTimer=setInterval(function(){
     if(!sbOnline||!appFullyLoaded) return;
+    if(pollInFlight){ console.log('Poll skipped - previous poll still in flight (slow connection)'); return; }
+    pollInFlight=true;
+    var pollStart=Date.now();
+
+    var recordsDone=false, caseDone=false;
+    function checkBothDone(){
+      if(recordsDone&&caseDone){
+        pollInFlight=false;
+        var elapsed=Date.now()-pollStart;
+        if(elapsed>3000) console.log('Poll took '+elapsed+'ms (slow)');
+      }
+    }
 
     // Poll records — fetch the 500 most recently updated,
     // apply any that aren't our own pending writes
@@ -7061,7 +7115,7 @@ function startPollingSync(){
         if(currentPage==='patients') render();
         if(currentPage==='dashboard') renderDashboard();
       }
-    }).catch(function(){});
+    }).catch(function(){}).finally(function(){recordsDone=true;checkBothDone();});
 
     // Poll case_records
     sbFetch('case_records','GET',null,'deleted=eq.false&order=updatedat.desc&limit=500')
@@ -7096,7 +7150,7 @@ function startPollingSync(){
         if(currentPage==='cases')
           ['fixed','removable','implant','ortho'].forEach(function(t){renderCaseTable(t);});
       }
-    }).catch(function(){});
+    }).catch(function(){}).finally(function(){caseDone=true;checkBothDone();});
   },10000); // every 10 seconds
 }
 
