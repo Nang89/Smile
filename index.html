@@ -5873,7 +5873,7 @@ function removePaymentEntry(caseType,recIdx,entryIdx,recKey){
   recKey=rec._key;
   appFullyLoaded=true;
   LS.set('caseRecords',JSON.stringify(caseRecords));
-  fbSaveCaseRecord(caseType,rec);
+  fbSaveCaseRecord(caseType,rec,true); // genuine removal - allow empty log
   document.getElementById('payment-popup').remove();
   renderCaseTable(caseType);
   openPaymentPopup(caseType,recIdx,recKey);
@@ -6152,23 +6152,33 @@ function supabaseLoadAll(callback){
   function done(){ loaded++; if(loaded>=total && callback) callback(); }
 
   // Load records
-  sbFetchAll('records','deleted=eq.false&order=createdat.asc')
-  .then(function(d){
+  // Two queries: the active records to display, and the complete id list
+  // INCLUDING deleted ones. The id list is what makes the recovery merge
+  // below safe - without it, a deleted record still sitting in this
+  // device's localStorage looks "missing from Supabase" and gets re-saved
+  // with deleted:false, resurrecting it for every device.
+  Promise.all([
+    sbFetchAll('records','deleted=eq.false&order=createdat.asc'),
+    sbFetchAll('records','select=id')
+  ])
+  .then(function(res){
+    var d=res[0];
+    var allIds=new Set((res[1]||[]).map(function(r){return r.id;}));
     if(Array.isArray(d)&&(d.length>0||records.length===0)){
       var sbRecords=fixRecordDates(d.map(function(r){
         return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,doctor:r.doctor,
                 ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                 createdAt:r.createdat,updatedAt:r.updatedat};
       }));
-      // Merge localStorage records missing from Supabase (unsaved before page close)
-      // Skip records in pendingOwnWrites (recently deleted/modified locally)
-      var sbKeys=new Set(sbRecords.map(function(r){return r._key;}));
+      // Recover only records Supabase has never seen at all. If the id
+      // exists server-side (deleted or not), it was saved before and must
+      // not be re-created here.
       var localRaw=LS.get('dental-records');
       if(localRaw){
         try{
           var localRecords=JSON.parse(localRaw);
           localRecords.forEach(function(r){
-            if(r._key&&!sbKeys.has(r._key)&&!pendingOwnWrites[r._key]){
+            if(r._key&&!allIds.has(r._key)&&!pendingOwnWrites[r._key]){
               sbRecords.push(r);
               fbSaveRecord(r);
             }
@@ -6183,9 +6193,15 @@ function supabaseLoadAll(callback){
     done();
   }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');showVpnWarning();done()});
 
-  // Load case records
-  sbFetchAll('case_records','deleted=eq.false&order=createdat.asc')
-  .then(function(d){
+  // Load case records (same two-query approach as records above so that
+  // deleted case records are never resurrected by the recovery merge)
+  Promise.all([
+    sbFetchAll('case_records','deleted=eq.false&order=createdat.asc'),
+    sbFetchAll('case_records','select=id')
+  ])
+  .then(function(res){
+    var d=res[0];
+    var allCaseIds=new Set((res[1]||[]).map(function(r){return r.id;}));
     var totalExisting=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
     if(Array.isArray(d)&&(d.length>0||totalExisting===0)){
       var cr={fixed:[],removable:[],implant:[],ortho:[]};
@@ -6211,7 +6227,7 @@ function supabaseLoadAll(callback){
           var localCR=JSON.parse(localCaseRaw);
           ['fixed','removable','implant','ortho'].forEach(function(cat){
             (localCR[cat]||[]).forEach(function(r){
-              if(r._key&&!sbCaseKeys.has(r._key)){
+              if(r._key&&!allCaseIds.has(r._key)&&!pendingOwnWrites[r._key]){
                 if(!cr[cat]) cr[cat]=[];
                 cr[cat].push(r);
                 fbSaveCaseRecord(cat,r);
@@ -6551,20 +6567,51 @@ function fbDeleteRecord(rec){
   .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
-function fbSaveCaseRecord(caseType,rec){
+// allowEmptyDeposit must be passed explicitly by the one caller that
+// legitimately empties a payment log (deletePaymentEntry). Every other
+// caller saves with whatever depositLog happens to be in memory, and if
+// that copy is stale or was never parsed, writing it would erase the real
+// payment history on the server. So when the log is empty and the caller
+// did not opt in, read the server's copy first and keep it.
+function fbSaveCaseRecord(caseType,rec,allowEmptyDeposit){
   if(!rec._key) rec._key=genId('case');
   rec.createdAt=rec.createdAt||Date.now();
   rec.updatedAt=Date.now();
   markOwnWrite(rec._key);
-  var row={id:rec._key,category:caseType,date:rec.date,treat:rec.treat,name:rec.name,
+
+  function buildRow(){
+    return {id:rec._key,category:caseType,date:rec.date,treat:rec.treat,name:rec.name,
             age:rec.age,sex:rec.sex,newold:rec.newold,address:rec.address,phone:rec.phone,
             drname:rec.drname,total:rec.total,drnote:rec.drnote,
             donedate:rec.doneDate||null,
             depositlog:JSON.stringify(rec.depositLog||[]),
             done:rec.done||false,createdat:rec.createdAt,updatedat:rec.updatedAt,deleted:false};
-  sbFetch('case_records','POST',[row],'on_conflict=id')
-  .then(function(r){ if(!r.ok) throw new Error('save failed: '+r.status); showSyncStatus('Saved','#27ae60'); })
-  .catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
+  }
+
+  function push(row){
+    return sbFetch('case_records','POST',[row],'on_conflict=id')
+      .then(function(r){ if(!r.ok) throw new Error('save failed: '+r.status); showSyncStatus('Saved','#27ae60'); })
+      .catch(function(){showSyncStatus('Save failed - check connection','#c0392b');});
+  }
+
+  var logEmpty=!rec.depositLog||rec.depositLog.length===0;
+  if(logEmpty&&!allowEmptyDeposit){
+    sbFetch('case_records','GET',null,'id=eq.'+rec._key+'&select=depositlog')
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(Array.isArray(d)&&d.length&&d[0].depositlog){
+        try{
+          var serverLog=JSON.parse(d[0].depositlog);
+          if(Array.isArray(serverLog)&&serverLog.length>0) rec.depositLog=serverLog;
+        }catch(e){}
+      }
+      return push(buildRow());
+    })
+    .catch(function(){ return push(buildRow()); });
+    return rec;
+  }
+
+  push(buildRow());
   return rec;
 }
 
