@@ -6134,25 +6134,22 @@ function supabaseLoadAll(callback){
                 createdAt:r.createdat,updatedAt:r.updatedat};
       }));
       // Merge localStorage records missing from Supabase (unsaved before page close)
-      // BUT skip any key in deletedKeys (records intentionally deleted)
+      // Skip records in pendingOwnWrites (recently deleted/modified locally)
       var sbKeys=new Set(sbRecords.map(function(r){return r._key;}));
-      var deletedKeys=JSON.parse(LS.get('deletedRecordKeys')||'[]');
-      var deletedSet=new Set(deletedKeys);
       var localRaw=LS.get('dental-records');
       if(localRaw){
         try{
           var localRecords=JSON.parse(localRaw);
           localRecords.forEach(function(r){
-            if(r._key&&!sbKeys.has(r._key)&&!deletedSet.has(r._key)&&!pendingOwnWrites[r._key]){
-              // Only recover records that were NOT intentionally deleted
+            if(r._key&&!sbKeys.has(r._key)&&!pendingOwnWrites[r._key]){
               sbRecords.push(r);
               fbSaveRecord(r);
             }
           });
         }catch(e){}
       }
-      // Also filter Supabase results against pending deletes
-      sbRecords=sbRecords.filter(function(r){return !pendingOwnWrites[r._key]&&!deletedSet.has(r._key);});
+      // Filter out any records pending deletion
+      sbRecords=sbRecords.filter(function(r){return !pendingOwnWrites[r._key];});
       records=sbRecords;
       LS.set('dental-records',JSON.stringify(records));
     }
@@ -6454,7 +6451,7 @@ function supabaseReloadTable(tbl){
           return {date:r.date,on:r.on_,sex:r.sex,cas:r.cas,price:r.price,doctor:r.doctor,
                   ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                   createdAt:r.createdat,updatedAt:r.updatedat};
-        }));
+        })).filter(function(r){return !pendingOwnWrites[r._key];});
         LS.set('dental-records',JSON.stringify(records));
         updateBadges();
         if(currentPage==='patients') render();
@@ -6487,7 +6484,10 @@ function supabaseReloadTable(tbl){
 }
 
 function loadFromLocalStorage(){
-  var lr=LS.get('dental-records');if(lr)records=fixRecordDates(JSON.parse(lr));
+  var lr=LS.get('dental-records');
+  if(lr){
+    records=fixRecordDates(JSON.parse(lr));
+  }
   var lp=LS.get('pharmacyIncome');if(lp)pharmacyIncome=fixRecordDates(JSON.parse(lp));
   var lpp=LS.get('pharmacyPurchase');if(lpp)pharmacyPurchase=fixRecordDates(JSON.parse(lpp));
   var lpe=LS.get('pharmacyExpend');if(lpe)pharmacyExpend=fixRecordDates(JSON.parse(lpe));
@@ -6516,18 +6516,10 @@ function fbSaveRecord(rec){
 
 function fbDeleteRecord(rec){
   if(!rec._key) return;
-  markOwnWrite(rec._key);
-  pendingOwnWrites[rec._key]=Date.now()+10000;
-  // Persist deleted key to localStorage so it is never re-added by the
-  // localStorage recovery merge even if the page is refreshed before
-  // Supabase confirms the delete
-  try{
-    var dk=JSON.parse(LS.get('deletedRecordKeys')||'[]');
-    if(!dk.includes(rec._key)){dk.push(rec._key);}
-    // Keep only the last 200 deleted keys to avoid unbounded growth
-    if(dk.length>200) dk=dk.slice(-200);
-    LS.set('deletedRecordKeys',JSON.stringify(dk));
-  }catch(e){}
+  // Block this key from being re-added for 60 seconds
+  // (enough time for the PATCH to reach Supabase on any connection speed)
+  pendingOwnWrites[rec._key]=Date.now();
+  setTimeout(function(){delete pendingOwnWrites[rec._key];},60000);
   sbFetch('records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
   .then(function(r){
     if(!r.ok){
