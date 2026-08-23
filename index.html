@@ -5146,7 +5146,7 @@ function switchPharmacyTab(tab, el){
 
 // Expose functions globally for inline onclick
 window._editRec = function(i){ editRec(i); };
-window._delRec  = function(i){ delRec(i); };
+window._delRec  = function(key){ delRec(key); }; // key not index
 
 // Render on load
 render();
@@ -6133,25 +6133,26 @@ function supabaseLoadAll(callback){
                 ptname:r.ptname,fromCase:r.fromcase,_key:r.id,
                 createdAt:r.createdat,updatedAt:r.updatedat};
       }));
-      // Check localStorage for any records saved locally but not yet in
-      // Supabase — these are records where the async HTTP save didn't
-      // complete before the page was closed (the "last 2 records" bug).
-      // Merge them in and re-send them to Supabase now.
+      // Merge localStorage records missing from Supabase (unsaved before page close)
+      // BUT skip any key in deletedKeys (records intentionally deleted)
       var sbKeys=new Set(sbRecords.map(function(r){return r._key;}));
+      var deletedKeys=JSON.parse(LS.get('deletedRecordKeys')||'[]');
+      var deletedSet=new Set(deletedKeys);
       var localRaw=LS.get('dental-records');
       if(localRaw){
         try{
           var localRecords=JSON.parse(localRaw);
           localRecords.forEach(function(r){
-            if(r._key&&!sbKeys.has(r._key)){
-              // This record is in localStorage but missing from Supabase
-              // — re-send it now so it isn't permanently lost.
+            if(r._key&&!sbKeys.has(r._key)&&!deletedSet.has(r._key)&&!pendingOwnWrites[r._key]){
+              // Only recover records that were NOT intentionally deleted
               sbRecords.push(r);
               fbSaveRecord(r);
             }
           });
         }catch(e){}
       }
+      // Also filter Supabase results against pending deletes
+      sbRecords=sbRecords.filter(function(r){return !pendingOwnWrites[r._key]&&!deletedSet.has(r._key);});
       records=sbRecords;
       LS.set('dental-records',JSON.stringify(records));
     }
@@ -6516,8 +6517,25 @@ function fbSaveRecord(rec){
 function fbDeleteRecord(rec){
   if(!rec._key) return;
   markOwnWrite(rec._key);
+  pendingOwnWrites[rec._key]=Date.now()+10000;
+  // Persist deleted key to localStorage so it is never re-added by the
+  // localStorage recovery merge even if the page is refreshed before
+  // Supabase confirms the delete
+  try{
+    var dk=JSON.parse(LS.get('deletedRecordKeys')||'[]');
+    if(!dk.includes(rec._key)){dk.push(rec._key);}
+    // Keep only the last 200 deleted keys to avoid unbounded growth
+    if(dk.length>200) dk=dk.slice(-200);
+    LS.set('deletedRecordKeys',JSON.stringify(dk));
+  }catch(e){}
   sbFetch('records','PATCH',{deleted:true,updatedat:Date.now()},'id=eq.'+rec._key)
-  .then(function(r){ if(!r.ok) showSyncStatus('Delete failed','#c0392b'); })
+  .then(function(r){
+    if(!r.ok){
+      showSyncStatus('Delete failed','#c0392b');
+    } else {
+      showSyncStatus('Deleted','#27ae60');
+    }
+  })
   .catch(function(){showSyncStatus('Delete failed - check connection','#c0392b');});
 }
 
