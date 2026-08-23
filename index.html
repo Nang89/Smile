@@ -1767,6 +1767,10 @@ input, select, textarea{
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     Settings
   </div>
+  <div class="mobile-nav-item" onclick="manualRefresh()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    Refresh
+  </div>
   <div class="mobile-nav-item" onclick="logout()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     Logout
@@ -2616,10 +2620,14 @@ function editRec(i){
   }
 }
 
-function delRec(i){
-  var rec=records[i];
+function delRec(key){
+  // Use _key (stable ID) not array index — index shifts after each delete
+  // causing wrong row to be deleted on repeated clicks
+  var idx=records.findIndex(function(r){return r._key===key;});
+  if(idx<0) return; // already deleted
+  var rec=records[idx];
   fbDeleteRecord(rec);
-  records.splice(i,1);
+  records.splice(idx,1);
   LS.set('dental-records',JSON.stringify(records));
   appFullyLoaded=true;
   if(rec&&rec._key&&editKey===rec._key){
@@ -2657,13 +2665,13 @@ function render(){
     delBtn.textContent='Del';
     delBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#fde4e2;cursor:pointer;font-size:0.75rem';
     delBtn.classList.add('row-action-btn');
-    delBtn.setAttribute('data-idx',realIdx);
+    delBtn.setAttribute('data-key', r._key||'');
     delBtn.onclick=function(){
-      var idx=parseInt(this.getAttribute('data-idx'));
-      var rec=records[idx];
+      var key=this.getAttribute('data-key');
+      var rec=records.find(function(r){return r._key===key;});
       var label=rec?(rec.ptname?rec.ptname+' — ':'')+rec.cas:'this record';
       if(!confirm('Delete "'+label+'"?\nThis cannot be undone.')) return;
-      delRec(idx);
+      delRec(key);
     };
 
     const td1=document.createElement('td');td1.textContent=i+1;
@@ -6310,8 +6318,7 @@ function startSupabaseRealtime(){
     var connectTimeout=setTimeout(function(){
       if(!realtimeConnected){
         try{ws.close();}catch(e){}
-        // Timed out — retry realtime after 10 seconds
-        setTimeout(startSupabaseRealtime, 10000);
+        showSyncStatus('Realtime unavailable — use 🔄 Refresh to sync','#e67e22');
       }
     },6000);
 
@@ -6354,18 +6361,15 @@ function startSupabaseRealtime(){
     };
     ws.onerror=function(){
       realtimeConnected=false;
-      showSyncStatus('Reconnecting...','#e67e22');
-      // Retry realtime after 5 seconds on error
-      setTimeout(startSupabaseRealtime, 5000);
+      showSyncStatus('Realtime disconnected — use 🔄 Refresh','#e67e22');
     };
     ws.onclose=function(){
       realtimeConnected=false;
-      // Connection dropped — auto-retry after 5 seconds
-      setTimeout(startSupabaseRealtime, 5000);
+      showSyncStatus('Realtime disconnected — use 🔄 Refresh','#e67e22');
     };
   }catch(e){
     realtimeConnected=false;
-    setTimeout(startSupabaseRealtime, 5000);
+    showSyncStatus('Realtime unavailable — use 🔄 Refresh','#e67e22');
   }
 }
 
@@ -6671,6 +6675,18 @@ function firebasePull(){
     updateBadges();
     renderCurrentPage();
     showSyncStatus('Pulled from Supabase','#27ae60');
+  });
+}
+
+function manualRefresh(){
+  var btn=document.getElementById('manual-refresh-btn');
+  if(btn){btn.textContent='⏳ Refreshing...';btn.disabled=true;}
+  showSyncStatus('Refreshing...','#e67e22');
+  supabaseLoadAll(function(){
+    updateBadges();
+    renderCurrentPage();
+    showSyncStatus('Up to date ✓','#27ae60');
+    if(btn){btn.textContent='🔄 Refresh';btn.disabled=false;}
   });
 }
 
