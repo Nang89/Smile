@@ -1866,23 +1866,29 @@ function tryPasswordLogin(){
   var inp=document.getElementById('login-password-input');
   var entered=inp?inp.value:'';
   var err=document.getElementById('pin-error');
-  // Check which role the password matches
-  var matchedRole=null;
-  var roles=['admin','cashier','pharmacy','inventory'];
-  for(var i=0;i<roles.length;i++){
-    if(entered===PINS[roles[i]]){
-      matchedRole=roles[i];
-      break;
+  if(!entered){
+    if(err){err.style.display='block';err.textContent='Please enter a password.';}
+    return;
+  }
+  // Hash the entered password then compare against stored hashes
+  hashPassword(entered).then(function(hashed){
+    var matchedRole=null;
+    var roles=['admin','cashier','pharmacy','inventory'];
+    for(var i=0;i<roles.length;i++){
+      if(hashed===PINS[roles[i]]){
+        matchedRole=roles[i];
+        break;
+      }
     }
-  }
-  if(matchedRole){
-    if(inp) inp.value='';
-    if(err) err.style.display='none';
-    doLogin(matchedRole);
-  } else {
-    if(err){err.style.display='block';err.textContent='Wrong password. Try again.';}
-    if(inp){inp.value='';inp.focus();}
-  }
+    if(matchedRole){
+      if(inp) inp.value='';
+      if(err) err.style.display='none';
+      doLogin(matchedRole);
+    } else {
+      if(err){err.style.display='block';err.textContent='Wrong password. Try again.';}
+      if(inp){inp.value='';inp.focus();}
+    }
+  });
 }
 
 function backRole(){selectedRole=null;}
@@ -1898,7 +1904,6 @@ function doLogin(role){
   var defaultPage={admin:'dashboard',cashier:'patients',pharmacy:'pharmacy',inventory:'inventory'};
   goTo(defaultPage[role], null);
   // Connect to Firebase immediately on login
-  console.log('STARTUP records count:', records.length);
   firebaseConnect();
   // Start auto backup scheduler
   scheduleAutoBackup();
@@ -2017,7 +2022,29 @@ const LS = {
   set: function(k,v){try{localStorage.setItem(k,v);}catch(e){}},
   remove: function(k){try{localStorage.removeItem(k);}catch(e){}}
 };
-var PINS=JSON.parse(LS.get('clinicPins')||'null')||{admin:'Smile2024',cashier:'2222',pharmacy:'3333',inventory:'4444'};
+// ── Password hashing (SHA-256 via Web Crypto API) ──
+// Passwords are never stored or synced in plain text.
+// We store only the hex digest. On first run, the hardcoded defaults
+// are hashed immediately and saved — the plain text never touches storage.
+async function hashPassword(plain){
+  var enc=new TextEncoder();
+  var buf=await crypto.subtle.digest('SHA-256',enc.encode(plain));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+
+// PINS stores hashed values only. On very first run we hash the defaults.
+var PINS_RAW=JSON.parse(LS.get('clinicPins')||'null');
+var PINS=PINS_RAW||{admin:'',cashier:'',pharmacy:'',inventory:''};
+// If first run (no saved pins), hash the defaults and save immediately
+if(!PINS_RAW){
+  (async function(){
+    PINS.admin    = await hashPassword('Smile2024');
+    PINS.cashier  = await hashPassword('2222');
+    PINS.pharmacy = await hashPassword('3333');
+    PINS.inventory= await hashPassword('4444');
+    LS.set('clinicPins',JSON.stringify(PINS));
+  })();
+}
 // -- CASE & DOCTOR LISTS --
 const DEFAULT_CASES=['E/A','Impaction','Filling','RCT','R-filling'];
 const DEFAULT_DOCTORS=['Dr. SHAK','Dr. HEM','AMM'];
@@ -2631,7 +2658,6 @@ function delRec(i){
 
 
 function render(){
-  console.log('RENDER records count:', records.length);
   const y=viewDate.getFullYear();
   const m=String(viewDate.getMonth()+1).padStart(2,'0');
   const d=String(viewDate.getDate()).padStart(2,'0');
@@ -2660,7 +2686,13 @@ function render(){
     delBtn.style.cssText='padding:3px 6px;border:none;border-radius:5px;background:#fde4e2;cursor:pointer;font-size:0.75rem';
     delBtn.classList.add('row-action-btn');
     delBtn.setAttribute('data-idx',realIdx);
-    delBtn.onclick=function(){delRec(parseInt(this.getAttribute('data-idx')));};
+    delBtn.onclick=function(){
+      var idx=parseInt(this.getAttribute('data-idx'));
+      var rec=records[idx];
+      var label=rec?(rec.ptname?rec.ptname+' — ':'')+rec.cas:'this record';
+      if(!confirm('Delete "'+label+'"?\nThis cannot be undone.')) return;
+      delRec(idx);
+    };
 
     const td1=document.createElement('td');td1.textContent=i+1;
     const td2=document.createElement('td');td2.textContent=r.on;
@@ -2680,7 +2712,7 @@ function render(){
     total+=Number(r.price)||0;
   });
   const bar=document.getElementById('total-bar');
-  if(records.length>0){
+  if(filtered.length>0){
     bar.style.display='flex';
     document.getElementById('total-price').textContent='\u00a5'+total.toLocaleString();
   } else {
@@ -5987,6 +6019,25 @@ function showSyncStatus(msg,color){
   if(color!=='#e67e22') setTimeout(function(){el.style.display='none';},3000);
 }
 
+var _vpnWarningShown=false;
+function showVpnWarning(){
+  if(_vpnWarningShown) return;
+  _vpnWarningShown=true;
+  var d=document.createElement('div');
+  d.id='vpn-warning';
+  d.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;'
+    +'background:#c0392b;color:#fff;border-radius:12px;padding:14px 20px;'
+    +'box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;'
+    +'max-width:340px;width:calc(100% - 32px);font-size:0.85rem;font-weight:600;';
+  d.innerHTML='<span style="font-size:1.4rem">⚠️</span>'
+    +'<div style="flex:1"><div style="font-weight:800;margin-bottom:2px">No Server Connection</div>'
+    +'<div style="font-weight:500;opacity:0.9">On main WiFi? Turn on VPN then refresh.</div></div>'
+    +'<button onclick="document.getElementById(\'vpn-warning\').remove()" '
+    +'style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;'
+    +'padding:6px 10px;cursor:pointer;font-weight:700;font-size:0.85rem;white-space:nowrap">✕</button>';
+  document.body.appendChild(d);
+}
+
 function renderCurrentPage(){
   if(currentPage==='patients'){ render(); }
   else if(currentPage==='dashboard'){ renderDashboard(); }
@@ -6001,7 +6052,6 @@ function renderCurrentPage(){
 }
 
 function goTo(page,el){
-  console.log('GOTO page:', page, '| records:', records.length, '| currentPage was:', currentPage);
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){n.classList.remove('active');});
   document.querySelectorAll('.page-content').forEach(function(p){p.style.display='none';});
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(function(n){
@@ -6078,6 +6128,8 @@ function firebaseConnect(){
   supabaseLoadAll(function(){
     appFullyLoaded=true;
     sbOnline=true;
+    _vpnWarningShown=false;
+    var w=document.getElementById('vpn-warning');if(w)w.remove();
     showSyncStatus('Connected','#27ae60');
     updateBadges();
     renderCurrentPage();
@@ -6133,7 +6185,7 @@ function supabaseLoadAll(callback){
       LS.set('dental-records',JSON.stringify(records));
     }
     done();
-  }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');done()});
+  }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');showVpnWarning();done()});
 
   // Load case records
   sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
@@ -6261,7 +6313,7 @@ function supabaseLoadAll(callback){
           if(row.key==='phSuppliers'){phSuppliers=val;LS.set('phSuppliers',JSON.stringify(val));}
           if(row.key==='pharmUnits'){pharmUnits=val;LS.set('pharmUnits',JSON.stringify(val));}
           if(row.key==='invCats'){invCats=val;LS.set('invCats',JSON.stringify(val));}
-          if(row.key==='clinicPins'){PINS=val;LS.set('clinicPins',JSON.stringify(val));}
+          // clinicPins intentionally NOT loaded from Supabase — passwords are local-only
         }catch(e){}
       });
     }
@@ -6606,8 +6658,8 @@ function autoSync(){
     {key:'caseTreatLists',value:JSON.stringify(caseTreatmentLists)},
     {key:'phSuppliers',value:JSON.stringify(phSuppliers)},
     {key:'pharmUnits',value:JSON.stringify(pharmUnits)},
-    {key:'invCats',value:JSON.stringify(invCats)},
-    {key:'clinicPins',value:JSON.stringify(PINS)}
+    {key:'invCats',value:JSON.stringify(invCats)}
+    // NOTE: clinicPins intentionally excluded — passwords stay local only
   ];
   sbFetch('settings','POST',settings,'on_conflict=key')
   .then(function(){showSyncStatus('Saved','#27ae60');})
@@ -6698,11 +6750,11 @@ function renderSettings(){
   renderInvCats();
   renderPhSuppliersList();
   renderPharmUnits();
-  // Passwords - show current
+  // Passwords - never show current value, just a neutral placeholder
   var fields={admin:'pw-admin',cashier:'pw-cashier',pharmacy:'pw-pharmacy',inventory:'pw-inventory'};
   Object.keys(fields).forEach(function(role){
     var el=document.getElementById(fields[role]);
-    if(el) el.placeholder='Current: '+PINS[role];
+    if(el) el.placeholder='Enter new password to change';
   });
 }
 
@@ -7024,24 +7076,32 @@ function removeSettingsDoctor(i){
 
 function savePasswords(){
   var fields={admin:'pw-admin',cashier:'pw-cashier',pharmacy:'pw-pharmacy',inventory:'pw-inventory'};
-  var changed=false;
-  Object.keys(fields).forEach(function(role){
+  var roles=Object.keys(fields);
+  var newVals={};
+  var hasChange=false;
+  roles.forEach(function(role){
     var el=document.getElementById(fields[role]);
-    if(el&&el.value.trim()){
-      PINS[role]=el.value.trim();
-      el.value='';
-      el.placeholder='Current: '+PINS[role];
-      changed=true;
-    }
+    if(el&&el.value.trim()){newVals[role]=el.value.trim();hasChange=true;}
   });
-  if(changed){
+  if(!hasChange){alert('No changes made. Enter a new password to change it.');return;}
+  // Hash all new passwords in parallel then save
+  var hashPromises=roles.map(function(role){
+    if(newVals[role]){
+      return hashPassword(newVals[role]).then(function(h){PINS[role]=h;});
+    }
+    return Promise.resolve();
+  });
+  Promise.all(hashPromises).then(function(){
     LS.set('clinicPins',JSON.stringify(PINS));
+    // Clear input fields and reset placeholders (no plain text shown)
+    roles.forEach(function(role){
+      var el=document.getElementById(fields[role]);
+      if(el){el.value='';el.placeholder='Enter new password to change';}
+    });
     saveAllSettings();
     showSyncStatus('Passwords saved','#27ae60');
     alert('Passwords updated successfully!');
-  } else {
-    alert('No changes made. Enter a new password to change it.');
-  }
+  });
 }
 
 function removeModalById(id){var el=document.getElementById(id);if(el)el.remove();}
