@@ -6098,6 +6098,34 @@ function sbFetch(table,method,body,params){
   return fetch(url,opts);
 }
 
+// Supabase caps every response at 1000 rows regardless of the limit
+// parameter, so anything above that must be fetched page by page using
+// Range headers. This keeps requesting the next 1000-row window until a
+// short page comes back, then resolves with every row combined.
+function sbFetchAll(table,params){
+  var PAGE=1000;
+  var all=[];
+  function fetchPage(offset){
+    var h=sbHeaders();
+    h['Range-Unit']='items';
+    h['Range']=offset+'-'+(offset+PAGE-1);
+    var url=SB_URL+'/rest/v1/'+table+(params?'?'+params:'');
+    return fetch(url,{method:'GET',headers:h})
+      .then(function(r){
+        if(!r.ok&&r.status!==206) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(d){
+        if(!Array.isArray(d)) return all;
+        all=all.concat(d);
+        // A short page means we've reached the end
+        if(d.length<PAGE) return all;
+        return fetchPage(offset+PAGE);
+      });
+  }
+  return fetchPage(0);
+}
+
 function genId(prefix){
   return (prefix||'id')+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
 }
@@ -6124,8 +6152,7 @@ function supabaseLoadAll(callback){
   function done(){ loaded++; if(loaded>=total && callback) callback(); }
 
   // Load records
-  sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
-  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  sbFetchAll('records','deleted=eq.false&order=createdat.asc')
   .then(function(d){
     if(Array.isArray(d)&&(d.length>0||records.length===0)){
       var sbRecords=fixRecordDates(d.map(function(r){
@@ -6157,8 +6184,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load records failed:',e);showSyncStatus('Could not load Daily Records - check connection','#c0392b');showVpnWarning();done()});
 
   // Load case records
-  sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
-  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  sbFetchAll('case_records','deleted=eq.false&order=createdat.asc')
   .then(function(d){
     var totalExisting=(caseRecords.fixed||[]).length+(caseRecords.removable||[]).length+(caseRecords.implant||[]).length+(caseRecords.ortho||[]).length;
     if(Array.isArray(d)&&(d.length>0||totalExisting===0)){
@@ -6201,8 +6227,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load case records failed:',e);showSyncStatus('Could not load Case Records - check connection','#c0392b');done();});
 
   // Load pharmacy income
-  sbFetch('pharmacy_income','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
-  .then(function(r){return r.json();})
+  sbFetchAll('pharmacy_income','deleted=eq.false&order=updatedat.asc')
   .then(function(d){
     if(Array.isArray(d)){
       pharmacyIncome=fixRecordDates(d.map(function(r){
@@ -6214,8 +6239,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy income failed:',e);done();});
 
   // Load pharmacy purchase
-  sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
-  .then(function(r){return r.json();})
+  sbFetchAll('pharmacy_purchase','deleted=eq.false&order=updatedat.asc')
   .then(function(d){
     if(Array.isArray(d)){
       pharmacyPurchase=fixRecordDates(d.map(function(r){
@@ -6228,8 +6252,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy purchase failed:',e);done();});
 
   // Load pharmacy expend
-  sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
-  .then(function(r){return r.json();})
+  sbFetchAll('pharmacy_expend','deleted=eq.false&order=updatedat.asc')
   .then(function(d){
     if(Array.isArray(d)){
       pharmacyExpend=fixRecordDates(d.map(function(r){
@@ -6241,8 +6264,7 @@ function supabaseLoadAll(callback){
   }).catch(function(e){console.error('Load pharmacy expend failed:',e);done();});
 
   // Load inventory
-  sbFetch('inv_stock_in','GET',null,'deleted=eq.false&order=updatedat.asc&limit=1000000')
-  .then(function(r){return r.json();})
+  sbFetchAll('inv_stock_in','deleted=eq.false&order=updatedat.asc')
   .then(function(d){
     if(Array.isArray(d)){
       invStockIn=fixRecordDates(d.map(function(r){
@@ -6443,8 +6465,7 @@ function applyRealtimeChange(tbl, changeType, newRow, oldRow){
 
 function supabaseReloadTable(tbl){
   if(tbl==='records'){
-    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
-    .then(function(r){return r.json();})
+    sbFetchAll('records','deleted=eq.false&order=createdat.asc')
     .then(function(d){
       if(Array.isArray(d)){
         records=fixRecordDates(d.map(function(r){
@@ -6460,8 +6481,7 @@ function supabaseReloadTable(tbl){
     });
   }
   if(tbl==='case_records'){
-    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000')
-    .then(function(r){return r.json();})
+    sbFetchAll('case_records','deleted=eq.false&order=createdat.asc')
     .then(function(d){
       if(Array.isArray(d)){
         var cr={fixed:[],removable:[],implant:[],ortho:[]};
@@ -7129,12 +7149,12 @@ function backupToSheets(silent,retryCount){
 
   // Read all data from Supabase then send to Google Sheets
   var fetches=[
-    sbFetch('records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000').then(function(r){return r.json();}),
-    sbFetch('case_records','GET',null,'deleted=eq.false&order=createdat.asc&limit=1000000').then(function(r){return r.json();}),
-    sbFetch('pharmacy_income','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
-    sbFetch('pharmacy_purchase','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
-    sbFetch('pharmacy_expend','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();}),
-    sbFetch('inv_stock_in','GET',null,'deleted=eq.false&limit=1000000').then(function(r){return r.json();})
+    sbFetchAll('records','deleted=eq.false&order=createdat.asc'),
+    sbFetchAll('case_records','deleted=eq.false&order=createdat.asc'),
+    sbFetchAll('pharmacy_income','deleted=eq.false'),
+    sbFetchAll('pharmacy_purchase','deleted=eq.false'),
+    sbFetchAll('pharmacy_expend','deleted=eq.false'),
+    sbFetchAll('inv_stock_in','deleted=eq.false')
   ];
 
   Promise.all(fetches)
